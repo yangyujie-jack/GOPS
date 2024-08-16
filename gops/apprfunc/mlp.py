@@ -23,12 +23,14 @@ __all__ = [
     "ActionValueDistri",
     "StochaPolicyDis",
     "StateValue",
+    "FiniteHorizonStateValue",
 ]
 
 import numpy as np
 import torch
 import warnings
 import torch.nn as nn
+from typing import Union
 from gops.utils.common_utils import get_activation_func
 from gops.utils.act_distribution_cls import Action_Distribution
 
@@ -101,11 +103,10 @@ class FiniteHorizonPolicy(nn.Module, Action_Distribution):
         self.register_buffer("act_low_lim", torch.from_numpy(kwargs["act_low_lim"]))
         self.action_distribution_cls = kwargs["action_distribution_cls"]
 
-    def forward(self, obs, virtual_t=1):
-        virtual_t = virtual_t * torch.ones(
-            size=[obs.shape[0], 1], dtype=torch.float32, device=obs.device
-        )
-        expand_obs = torch.cat((obs, virtual_t), 1)
+    def forward(self, obs, virtual_t: Union[int, torch.Tensor] = 1):
+        if isinstance(virtual_t, int):
+            virtual_t = virtual_t * torch.ones_like(obs[..., 0])
+        expand_obs = torch.cat((obs, virtual_t.unsqueeze(-1)), -1)
         action = (self.act_high_lim - self.act_low_lim) / 2 * torch.tanh(
             self.pi(expand_obs)
         ) + (self.act_high_lim + self.act_low_lim) / 2
@@ -354,3 +355,22 @@ class StateValue(nn.Module, Action_Distribution):
     def forward(self, obs):
         v = self.v(obs)
         return torch.squeeze(v, -1)
+
+
+class FiniteHorizonStateValue(nn.Module, Action_Distribution):
+    def __init__(self, **kwargs):
+        super().__init__()
+        obs_dim = kwargs["obs_dim"] + 1
+        hidden_sizes = kwargs["hidden_sizes"]
+        self.v = mlp(
+            [obs_dim] + list(hidden_sizes) + [1],
+            get_activation_func(kwargs["hidden_activation"]),
+            get_activation_func(kwargs["output_activation"]),
+        )
+        self.action_distribution_cls = kwargs["action_distribution_cls"]
+
+    def forward(self, obs, virtual_t: Union[int, torch.Tensor] = 1):
+        if isinstance(virtual_t, int):
+            virtual_t = virtual_t * torch.ones_like(obs[..., 0])
+        expand_obs = torch.cat((obs, virtual_t.unsqueeze(-1)), -1)
+        return self.v(expand_obs).squeeze(-1)
