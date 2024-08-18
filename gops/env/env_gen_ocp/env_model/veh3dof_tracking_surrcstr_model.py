@@ -19,6 +19,7 @@ class Veh3DoFTrackingSurrCstrModel(EnvModel):
         self,
         pre_horizon: int = 10,
         max_steer: float = torch.pi / 6,
+        surr_veh_num: int = 4,
         device: Union[torch.device, str, None] = None,
         veh_length: float = 4.8,
         veh_width: float = 2.0,
@@ -26,8 +27,8 @@ class Veh3DoFTrackingSurrCstrModel(EnvModel):
     ):
         ego_obs_dim = 6
         ref_obs_dim = 4
-        obstacle_obs_dim = 4
-        self.obs_dim = ego_obs_dim + ref_obs_dim * pre_horizon + obstacle_obs_dim
+        veh_obs_dim = 4
+        self.obs_dim = ego_obs_dim + ref_obs_dim * pre_horizon + veh_obs_dim * surr_veh_num
         super().__init__(
             obs_lower_bound=None,
             obs_upper_bound=None,

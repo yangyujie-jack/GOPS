@@ -15,6 +15,7 @@ class Veh3DoFTrackingSurrCstr(Veh3DoFTracking):
         dt: float = 0.1,
         path_para: Optional[Dict[str, Dict]] = None,
         u_para: Optional[Dict[str, Dict]] = None,
+        surr_veh_num: int = 4,
         max_acc: float = 3.0,
         max_steer: float = np.pi / 6,
         **kwargs,
@@ -33,6 +34,7 @@ class Veh3DoFTrackingSurrCstr(Veh3DoFTracking):
 
         self.context: RefTrajSurrCstrContext = RefTrajSurrCstrContext(
             pre_horizon=pre_horizon,
+            surr_veh_num=surr_veh_num,
             dt=dt,
             path_param=path_para,
             speed_param=u_para,
@@ -42,8 +44,8 @@ class Veh3DoFTrackingSurrCstr(Veh3DoFTracking):
         ref_obs_dim = 4
         veh_obs_dim = 4
         self.observation_space = spaces.Box(
-            low=np.array([-np.inf] * (ego_obs_dim + ref_obs_dim * pre_horizon + veh_obs_dim * self.context.surr_veh_num)),
-            high=np.array([np.inf] * (ego_obs_dim + ref_obs_dim * pre_horizon + veh_obs_dim * self.context.surr_veh_num)),
+            low=np.array([-np.inf] * (ego_obs_dim + ref_obs_dim * pre_horizon + veh_obs_dim * surr_veh_num)),
+            high=np.array([np.inf] * (ego_obs_dim + ref_obs_dim * pre_horizon + veh_obs_dim * surr_veh_num)),
             dtype=np.float32,
         )
         self.max_episode_steps = 100
