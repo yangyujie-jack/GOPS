@@ -11,7 +11,7 @@ __all__ = ["FHADPFeasible"]
 import time
 
 import torch
-from gops.algorithm.fhadp import FHADP
+from gops.algorithm.fhadp import ApproxContainer, FHADP
 from gops.utils.gops_typing import DataDict
 from gops.utils.tensorboard_setup import tb_tags
 
