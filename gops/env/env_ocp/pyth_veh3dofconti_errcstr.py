@@ -33,7 +33,8 @@ class PythVeh3dofcontiErrCstr(PythVeh3dofconti):
     @property
     def additional_info(self) -> Dict[str, Dict]:
         additional_info = super().additional_info
-        return additional_info.update({"constraint": {"shape": (2,), "dtype": np.float32},})
+        additional_info.update({"constraint": {"shape": (2,), "dtype": np.float32},})
+        return additional_info
 
     def get_constraint(self) -> np.ndarray:
         y, u = self.state[1], self.state[3]
