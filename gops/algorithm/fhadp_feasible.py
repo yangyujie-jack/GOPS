@@ -68,10 +68,9 @@ class FHADPFeasible(FHADP):
         sum_rewards = torch.stack(sum_rewards)
         max_constraints = torch.stack(max_constraints)
 
-        feasible = max_constraints < -EPSILON
+        feasible = max_constraints <= 0
         feasible_loss = masked_mean(
-            -sum_rewards - 1 / self.interior_t * 
-            torch.log(-torch.clamp_max(max_constraints, -EPSILON)),
+            self.interior_t * max_constraints.detach() * sum_rewards + max_constraints,
             feasible,
         )
         infeasible_loss = masked_mean(max_constraints, ~feasible)
