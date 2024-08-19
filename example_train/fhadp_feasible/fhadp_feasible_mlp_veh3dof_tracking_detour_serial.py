@@ -26,19 +26,15 @@ if __name__ == "__main__":
 
     ################################################
     # Key Parameters for users
-    parser.add_argument("--env_id", type=str, default="pyth_veh3dofconti_surrcstr")
-    parser.add_argument("--algorithm", type=str, default="FHADPDual")
-    parser.add_argument("--pre_horizon", type=int, default=20)
+    parser.add_argument("--env_id", type=str, default="veh3dof_tracking_detour")
+    parser.add_argument("--algorithm", type=str, default="FHADPFeasible")
+    parser.add_argument("--pre_horizon", type=int, default=10)
     parser.add_argument("--enable_cuda", default=False)
-    parser.add_argument("--seed", default=2680492381)
+    parser.add_argument("--seed", default=1)
     ################################################
     # 1. Parameters for environment
     parser.add_argument("--is_render", type=bool, default=False)
     parser.add_argument("--is_adversary", type=bool, default=False)
-
-    ################################################
-    # 2.1 Parameters of value approximate function
-    parser.add_argument("--value_func_type", type=str, default="MLP")
 
     # 2.2 Parameters of policy approximate function
     parser.add_argument(
@@ -48,13 +44,13 @@ if __name__ == "__main__":
     )
     parser.add_argument("--policy_func_type", type=str, default="MLP")
     parser.add_argument("--policy_act_distribution", type=str, default="default")
-    policy_func_type = parser.parse_known_args()[0].policy_func_type
-    parser.add_argument("--policy_hidden_sizes", type=list, default=[256, 256])
-    parser.add_argument("--policy_hidden_activation", type=str, default="elu")
-    
+    parser.add_argument("--policy_hidden_sizes", type=list, default=[64, 64])
+    parser.add_argument("--policy_hidden_activation", type=str, default="relu")
+
     ################################################
     # 3. Parameters for RL algorithm
-    parser.add_argument("--policy_learning_rate", type=float, default=3e-5)
+    parser.add_argument("--policy_learning_rate", type=float, default=1e-4)
+    parser.add_argument("--interior_t", type=float, default=1.0)
 
     ################################################
     # 4. Parameters for trainer
@@ -63,7 +59,7 @@ if __name__ == "__main__":
         type=str,
         default="off_serial_trainer")
     # Maximum iteration number
-    parser.add_argument("--max_iteration", type=int, default=50000)
+    parser.add_argument("--max_iteration", type=int, default=20000)
     trainer_type = parser.parse_known_args()[0].trainer
     parser.add_argument(
         "--ini_network_dir",
@@ -85,7 +81,7 @@ if __name__ == "__main__":
     # 5. Parameters for sampler
     parser.add_argument("--sampler_name", type=str, default="off_sampler")
     # Batch size of sampler for buffer store
-    parser.add_argument("--sample_batch_size", type=int, default=256)
+    parser.add_argument("--sample_batch_size", type=int, default=64)
     # Add noise to action for better exploration
     parser.add_argument(
         "--noise_params",
@@ -119,7 +115,6 @@ if __name__ == "__main__":
     # Step 2: create sampler in trainer
     sampler = create_sampler(**args)
     # Step 3: create buffer in trainer
-    # buffer = create_buffer(**args)
     buffer = create_buffer(**args)
     # Step 4: create evaluator in trainer
     evaluator = create_evaluator(**args)
@@ -133,6 +128,6 @@ if __name__ == "__main__":
 
     ################################################
     # Plot and save training figures
-    plot_all(args["save_folder"])
-    save_tb_to_csv(args["save_folder"])
-    print("Plot & Save are finished!")
+    # plot_all(args["save_folder"])
+    # save_tb_to_csv(args["save_folder"])
+    # print("Plot & Save are finished!")
