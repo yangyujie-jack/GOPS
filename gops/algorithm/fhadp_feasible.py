@@ -56,11 +56,17 @@ class FHADPFeasible(FHADP):
             orig_d = d
             orig_info = info
 
+            for p in self.networks.policy.parameters():
+                p.requires_grad = False
+
             for i in range(step + 1, self.pre_horizon):
                 orig_a = self.networks.policy(orig_o, i + 1)
                 orig_o, orig_r, orig_d, orig_info = self.envmodel.forward(orig_o, orig_a, orig_d, orig_info)
                 sum_reward += orig_r
                 max_constraint = torch.maximum(max_constraint, orig_info["constraint"].max(1).values)
+
+            for p in self.networks.policy.parameters():
+                p.requires_grad = True
 
             sum_rewards.append(sum_reward)
             max_constraints.append(max_constraint)
