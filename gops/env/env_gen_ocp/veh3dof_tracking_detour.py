@@ -46,7 +46,7 @@ class Veh3DoFTrackingDetour(Veh3DoFTracking):
             high=np.array([np.inf] * (ego_obs_dim + ref_obs_dim * pre_horizon + veh_obs_dim * self.context.surr_veh_num)),
             dtype=np.float32,
         )
-        self.max_episode_steps = 100
+        self.max_episode_steps = 200
 
     def reset(
         self,
