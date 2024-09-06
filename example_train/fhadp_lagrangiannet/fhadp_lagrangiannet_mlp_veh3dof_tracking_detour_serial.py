@@ -13,6 +13,8 @@ import os
 import argparse
 import json
 import numpy as np
+import os
+os.environ["OMP_NUM_THREADS"] = "1"
 
 from gops.create_pkg.create_alg import create_alg
 from gops.create_pkg.create_buffer import create_buffer
@@ -34,9 +36,10 @@ if __name__ == "__main__":
     # Key Parameters for users
     parser.add_argument("--env_id", type=str, default="veh3dof_tracking_detour")
     parser.add_argument("--algorithm", type=str, default="FHADPLagrangiannet")
-    parser.add_argument("--pre_horizon", type=int, default=30)
+    parser.add_argument("--pre_horizon", type=int, default=40)
     parser.add_argument("--enable_cuda", default=False)
-    parser.add_argument("--seed", default=None, help="seed")
+    parser.add_argument("--seed", default=1)
+    parser.add_argument("--eval_accuracy", type=bool, default=True)
     ################################################
     # 1. Parameters for environment
     parser.add_argument("--is_render", type=bool, default=False)
@@ -54,9 +57,8 @@ if __name__ == "__main__":
     )
     parser.add_argument("--policy_func_type", type=str, default="MLP")
     parser.add_argument("--policy_act_distribution", type=str, default="default")
-    policy_func_type = parser.parse_known_args()[0].policy_func_type
-    parser.add_argument("--policy_hidden_sizes", type=list, default=[256, 256])
-    parser.add_argument("--policy_hidden_activation", type=str, default="gelu")
+    parser.add_argument("--policy_hidden_sizes", type=list, default=[64, 64])
+    parser.add_argument("--policy_hidden_activation", type=str, default="relu")
     
     # 2.3 Parameters of multiplier approximate function
     parser.add_argument(
@@ -102,7 +104,7 @@ if __name__ == "__main__":
     # Max size of reply buffer
     parser.add_argument("--buffer_max_size", type=int, default=100000)
     # Batch size of replay samples from buffer
-    parser.add_argument("--replay_batch_size", type=int, default=256)
+    parser.add_argument("--replay_batch_size", type=int, default=64)
     # Period of sampling
     parser.add_argument("--sample_interval", type=int, default=1)
 
@@ -110,7 +112,7 @@ if __name__ == "__main__":
     # 5. Parameters for sampler
     parser.add_argument("--sampler_name", type=str, default="off_sampler")
     # Batch size of sampler for buffer store
-    parser.add_argument("--sample_batch_size", type=int, default=256)
+    parser.add_argument("--sample_batch_size", type=int, default=64)
     # Add noise to action for better exploration
     parser.add_argument(
         "--noise_params",
@@ -123,7 +125,7 @@ if __name__ == "__main__":
     parser.add_argument("--evaluator_name", type=str, default="evaluator")
     parser.add_argument("--num_eval_episode", type=int, default=10)
     parser.add_argument("--eval_interval", type=int, default=1000)
-    parser.add_argument("--eval_save", type=str, default=True, help="save evaluation data")
+    parser.add_argument("--eval_save", type=str, default=False, help="save evaluation data")
 
     ################################################
     # 7. Data savings
@@ -131,20 +133,19 @@ if __name__ == "__main__":
     # Save value/policy every N updates
     parser.add_argument("--apprfunc_save_interval", type=int, default=1000)
     # Save key info every N updates
-    parser.add_argument("--log_save_interval", type=int, default=1000)
+    parser.add_argument("--log_save_interval", type=int, default=100)
 
     ################################################
     # Get parameter dictionary
     args = vars(parser.parse_args())
     env = create_env(**args)
     args = init_args(env, **args)
-    start_tensorboard(args["save_folder"])
+    # start_tensorboard(args["save_folder"])
     # Step 1: create algorithm and approximate function
     alg = create_alg(**args)
     # Step 2: create sampler in trainer
     sampler = create_sampler(**args)
     # Step 3: create buffer in trainer
-    # buffer = create_buffer(**args)
     buffer = create_buffer(**args)
     # Step 4: create evaluator in trainer
     evaluator = create_evaluator(**args)
@@ -158,6 +159,6 @@ if __name__ == "__main__":
 
     ################################################
     # Plot and save training figures
-    plot_all(args["save_folder"])
-    save_tb_to_csv(args["save_folder"])
-    print("Plot & Save are finished!")
+    # plot_all(args["save_folder"])
+    # save_tb_to_csv(args["save_folder"])
+    # print("Plot & Save are finished!")

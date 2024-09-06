@@ -6,8 +6,11 @@
 #  Lab Leader: Prof. Shengbo Eben Li
 #  Email: lisb04@gmail.com
 
+import os
 import argparse
 import numpy as np
+import os
+os.environ["OMP_NUM_THREADS"] = "1"
 
 from gops.create_pkg.create_alg import create_alg
 from gops.create_pkg.create_buffer import create_buffer
@@ -28,9 +31,10 @@ if __name__ == "__main__":
     # Key Parameters for users
     parser.add_argument("--env_id", type=str, default="veh3dof_tracking_detour")
     parser.add_argument("--algorithm", type=str, default="FHADPFeasible")
-    parser.add_argument("--pre_horizon", type=int, default=10)
+    parser.add_argument("--pre_horizon", type=int, default=40)
     parser.add_argument("--enable_cuda", default=False)
     parser.add_argument("--seed", default=1)
+    parser.add_argument("--eval_accuracy", type=bool, default=True)
     ################################################
     # 1. Parameters for environment
     parser.add_argument("--is_render", type=bool, default=False)
@@ -94,7 +98,7 @@ if __name__ == "__main__":
     parser.add_argument("--evaluator_name", type=str, default="evaluator")
     parser.add_argument("--num_eval_episode", type=int, default=10)
     parser.add_argument("--eval_interval", type=int, default=100)
-    parser.add_argument("--eval_save", type=str, default=True, help="save evaluation data")
+    parser.add_argument("--eval_save", type=str, default=False, help="save evaluation data")
 
     ################################################
     # 7. Data savings
