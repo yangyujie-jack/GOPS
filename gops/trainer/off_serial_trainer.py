@@ -26,6 +26,14 @@ from gops.utils.parallel_task_manager import TaskPool
 from gops.utils.tensorboard_setup import add_scalars, tb_tags
 from gops.utils.log_data import LogData
 
+tb_tags.update(
+    {
+        "max_action_error_1": "Accuracy/Max action error 1",
+        "max_action_error_2": "Accuracy/Max action error 2",
+        "mean_action_error_3": "Accuracy/Mean action error 1",
+        "mean_action_error_4": "Accuracy/Mean action error 2",
+    }
+)
 
 class OffSerialTrainer:
     def __init__(self, alg, sampler, buffer, evaluator, **kwargs):
@@ -120,7 +128,7 @@ class OffSerialTrainer:
             elif self.evluate_tasks.completed_num == 1:
                 # Evaluation tasks is completed, log data and add another one.
                 objID = next(self.evluate_tasks.completed())[1]
-                total_avg_return = ray.get(objID)
+                total_avg_return, action_accuracy = ray.get(objID)
                 self._add_eval_task()
 
                 if (
@@ -139,6 +147,20 @@ class OffSerialTrainer:
                         self.save_folder
                         + "/apprfunc/apprfunc_{}_opt.pkl".format(self.iteration),
                     )
+                
+                max_error_1, mean_error_1, max_error_2, mean_error_2 = action_accuracy
+                self.writer.add_scalar(
+                    tb_tags["max_action_error_1"], max_error_1, self.iteration
+                )
+                self.writer.add_scalar(
+                    tb_tags["max_action_error_2"], max_error_2, self.iteration
+                )
+                self.writer.add_scalar(
+                    tb_tags["mean_action_error_3"], mean_error_1, self.iteration
+                )
+                self.writer.add_scalar(
+                    tb_tags["mean_action_error_4"], mean_error_2, self.iteration
+                )
 
                 self.writer.add_scalar(
                     tb_tags["Buffer RAM of RL iteration"],
