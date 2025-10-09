@@ -23,6 +23,7 @@ __all__ = [
     "ActionValueDistri",
     "StochaPolicyDis",
     "StateValue",
+    "StateValueDistri",
 ]
 
 import numpy as np
@@ -216,7 +217,7 @@ class StochaPolicy(nn.Module, Action_Distribution):
                 get_activation_func(kwargs["hidden_activation"]),
                 get_activation_func(kwargs["output_activation"]),
             )
-            self.log_std = nn.Parameter(-0.5*torch.ones(1, act_dim))
+            self.log_std = nn.Parameter(-0.5 * torch.ones(act_dim))
 
         self.min_log_std = kwargs["min_log_std"]
         self.max_log_std = kwargs["max_log_std"]
@@ -354,3 +355,27 @@ class StateValue(nn.Module, Action_Distribution):
     def forward(self, obs):
         v = self.v(obs)
         return torch.squeeze(v, -1)
+
+
+class StateValueDistri(nn.Module):
+    """
+    Approximated function of distributed state-value function.
+    Input: observation.
+    Output: parameters of state-value distribution.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__()
+        obs_dim = kwargs["obs_dim"]
+        hidden_sizes = kwargs["hidden_sizes"]
+        self.v = mlp(
+            [obs_dim] + list(hidden_sizes) + [2],
+            get_activation_func(kwargs["hidden_activation"]),
+            get_activation_func(kwargs["output_activation"]),
+        )
+
+    def forward(self, obs):
+        logits = self.v(obs)
+        value_mean, value_std = torch.chunk(logits, chunks=2, dim=-1)
+        value_std = torch.nn.functional.softplus(value_std) 
+        return torch.cat((value_mean, value_std), dim=-1)

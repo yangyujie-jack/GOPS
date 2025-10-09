@@ -108,11 +108,13 @@ def init_args(env, **args):
         dir_path = os.path.dirname(__file__)
         dir_path = os.path.dirname(dir_path)
         dir_path = os.path.dirname(dir_path)
+        save_folder_name = [args["algorithm"]]
+        description = args.get("description", "")
+        if len(description) > 0:
+            save_folder_name.append(description)
+        save_folder_name.append(datetime.datetime.now().strftime("%y%m%d-%H%M%S"))
         args["save_folder"] = os.path.join(
-            dir_path + "/results/",args["env_id"],
-            args["algorithm"] +'_'+
-            datetime.datetime.now().strftime("%y%m%d-%H%M%S"),
-        )
+            dir_path, "results", args["env_id"], "_".join(save_folder_name))
     os.makedirs(args["save_folder"], exist_ok=True)
     os.makedirs(args["save_folder"] + "/apprfunc", exist_ok=True)
     os.makedirs(args["save_folder"] + "/evaluator", exist_ok=True)

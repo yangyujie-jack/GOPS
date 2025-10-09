@@ -5,28 +5,21 @@
 #  Creator: iDLab
 #  Lab Leader: Prof. Shengbo Eben Li
 #  Email: lisb04@gmail.com
-#
-#  Description: Monte Carlo Sampler
-#  Update Date: 2022-10-20, Yuheng Lei: Revise Codes
-#  Update Date: 2021-03-10, Wenhan CAO: Revise Codes
-#  Update Date: 2021-03-05, Wenxuan Wang: add action clip
-#  Update Date: 2023-07-22, Zhilong Zheng: inherit from BaseSampler
-
 
 from typing import List
 
 import numpy as np
 import torch
-
 from gops.trainer.sampler.base import BaseSampler, Experience
 
 
-class OnSampler(BaseSampler):
+class OnDSampler(BaseSampler):
     def __init__(
         self, 
         sample_batch_size,
         index=0, 
         noise_params=None,
+        sample_clip: float = 3.,
         **kwargs
     ):
         super().__init__(
@@ -59,8 +52,11 @@ class OnSampler(BaseSampler):
         if self.need_value_flag:
             self.gae_lambda = 0.95
             self.mb_val = np.zeros((self.num_envs, self.horizon), dtype=np.float32)
+            self.mb_val_std = np.zeros((self.num_envs, self.horizon), dtype=np.float32)
             self.mb_adv = np.zeros((self.num_envs, self.horizon), dtype=np.float32)
+            self.mb_adv_sample = np.zeros((self.num_envs, self.horizon), dtype=np.float32)
             self.mb_ret = np.zeros((self.num_envs, self.horizon), dtype=np.float32)
+            self.mb_ret_sample = np.zeros((self.num_envs, self.horizon), dtype=np.float32)
         self.mb_info = {}
         self.info_keys = kwargs["additional_info"].keys()
         for k, v in kwargs["additional_info"].items():
@@ -70,6 +66,7 @@ class OnSampler(BaseSampler):
             self.mb_info["next_" + k] = np.zeros(
                 (self.num_envs, self.horizon, *v["shape"]), dtype=v["dtype"]
             )
+        self.sample_clip = sample_clip
 
     def _sample(self) -> dict:
         self.end_ptr = np.zeros(self.num_envs, dtype=np.int32)
@@ -98,7 +95,9 @@ class OnSampler(BaseSampler):
         if self.need_value_flag:
             mb_data.update({
                 "ret": torch.from_numpy(self.mb_ret.reshape(-1)),   
+                "ret_sample": torch.from_numpy(self.mb_ret_sample.reshape(-1)),   
                 "adv": torch.from_numpy(self.mb_adv.reshape(-1)),
+                "adv_sample": torch.from_numpy(self.mb_adv_sample.reshape(-1)),
             })
         for k, v in self.mb_info.items():
             mb_data[k] = torch.from_numpy(v.reshape(-1, *v.shape[2:]))
@@ -114,9 +113,12 @@ class OnSampler(BaseSampler):
         t: int,
     ):
         if self.need_value_flag:
-            value = self.networks.value(batch_obs).detach()
-            self.mb_val[:, t] = value
-        
+            with torch.no_grad():
+                val_logits = self.networks.value(batch_obs)
+            val_mean, val_std = torch.chunk(val_logits, chunks=2, dim=-1)
+            self.mb_val[:, t] = val_mean.squeeze(-1).numpy()
+            self.mb_val_std[:, t] = val_std.squeeze(-1).numpy()
+
         for i in np.arange(self.num_envs):
             (
                 obs, 
@@ -155,33 +157,48 @@ class OnSampler(BaseSampler):
                 or next_info["TimeLimit.truncated"]
                 or t == self.horizon - 1
             ) and self.need_value_flag:
-                last_obs_expand = torch.from_numpy(
-                    np.expand_dims(next_obs, axis=0).astype("float32")
-                )
-                est_last_value = self.networks.value(
-                    last_obs_expand
-                ).detach().item() * (1 - done)
+                if not done:
+                    last_obs = torch.from_numpy(next_obs).float()
+                    with torch.no_grad():
+                        last_val_logits = self.networks.value(last_obs)
+                    last_val_mean, last_val_std = torch.chunk(last_val_logits, chunks=2, dim=-1)
+                    last_val_mean.item()
+                    last_val_std.item()
+                else:
+                    last_val_mean = 0.
+                    last_val_std = 0.
                 self.end_ptr[i] = t
-                self._finish_trajs(i, est_last_value)
+                self._finish_trajs(i, last_val_mean, last_val_std)
                 self.start_ptr[i] = t + 1
 
-    def _finish_trajs(self, env_index: int, est_last_val: float):
+    def _finish_trajs(self, env_index: int, last_val: float, last_val_std: float):
         # calculate value target (mb_ret) & gae (mb_adv) whenever episode is finished
         path_slice = slice(self.start_ptr[env_index], self.end_ptr[env_index] + 1)
-        value_preds_slice = np.append(self.mb_val[env_index, path_slice], est_last_val)
-        rews_slice = self.mb_rew[env_index, path_slice]
-        length = len(rews_slice)
+        val = np.append(self.mb_val[env_index, path_slice], last_val)
+        val_std = np.append(self.mb_val_std[env_index, path_slice], last_val_std)
+        val_sample = np.clip(
+            np.random.normal(val, val_std),
+            -self.sample_clip * val_std,
+            self.sample_clip * val_std,
+        )
+        rew = self.mb_rew[env_index, path_slice]
+        length = len(rew)
         ret = np.zeros(length)
+        ret_sample = np.zeros(length)
         adv = np.zeros(length)
-        gae = 0.0
+        adv_sample = np.zeros(length)
+        gae = 0.
+        gae_sample = 0.
         for i in reversed(range(length)):
-            delta = (
-                rews_slice[i]
-                + self.gamma * value_preds_slice[i + 1]
-                - value_preds_slice[i]
-            )
+            delta = rew[i] + self.gamma * val[i + 1] - val[i]
+            delta_sample = rew[i] + self.gamma * val_sample[i + 1] - val_sample[i]
             gae = delta + self.gamma * self.gae_lambda * gae
-            ret[i] = gae + value_preds_slice[i]
+            gae_sample = delta_sample + self.gamma * self.gae_lambda * gae_sample
+            ret[i] = gae + val[i]
+            ret_sample[i] = gae_sample + val_sample[i]
             adv[i] = gae
+            adv_sample[i] = gae_sample
         self.mb_ret[env_index, path_slice] = ret
+        self.mb_ret_sample[env_index, path_slice] = ret_sample
         self.mb_adv[env_index, path_slice] = adv
+        self.mb_adv_sample[env_index, path_slice] = adv_sample

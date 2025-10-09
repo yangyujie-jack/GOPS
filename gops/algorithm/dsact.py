@@ -99,6 +99,7 @@ class DSACT(AlgorithmBase):
         auto_alpha: bool = True,
         target_entropy: Optional[float] = None,
         delay_update: int = 2,
+        n_iter: int = 1,
         **kwargs: Any,
     ):
         super().__init__(index, **kwargs)
@@ -114,6 +115,7 @@ class DSACT(AlgorithmBase):
         self.mean_std1= None
         self.mean_std2= None
         self.tau_b = kwargs.get("tau_b", self.tau)
+        self.n_iter = n_iter
 
     @property
     def adjustable_parameters(self):
@@ -126,8 +128,9 @@ class DSACT(AlgorithmBase):
         )
 
     def local_update(self, data: DataDict, iteration: int) -> dict:
-        tb_info = self._compute_gradient(data, iteration)
-        self._update(iteration)
+        for _ in range(self.n_iter):
+            tb_info = self._compute_gradient(data, iteration)
+            self._update(iteration)
         return tb_info
 
     def get_remote_update_info(
@@ -298,9 +301,15 @@ class DSACT(AlgorithmBase):
 
         ratio1 = (torch.pow(self.mean_std1, 2) / (torch.pow(q1_std_detach, 2) + bias)).clamp(min=0.1, max=10)
         ratio2 = (torch.pow(self.mean_std2, 2) / (torch.pow(q2_std_detach, 2) + bias)).clamp(min=0.1, max=10)
-        q1_loss = torch.mean(ratio1 *(huber_loss(q1, target_q1, delta = 50, reduction='none') 
-                                      + q1_std *(q1_std_detach.pow(2) - huber_loss(q1.detach(), target_q1_bound, delta = 50, reduction='none'))/(q1_std_detach +bias)
-                            ))
+        q1_loss = torch.mean(
+            ratio1 * (
+                huber_loss(q1, target_q1, delta = 50, reduction='none') +
+                q1_std * (
+                    q1_std_detach.pow(2) -
+                    huber_loss(q1.detach(), target_q1_bound, delta = 50, reduction='none')
+                ) / (q1_std_detach + bias)
+            )
+         )
         q2_loss = torch.mean(ratio2 *(huber_loss(q2, target_q2, delta = 50, reduction='none')
                                       + q2_std *(q2_std_detach.pow(2) - huber_loss(q2.detach(), target_q2_bound, delta = 50, reduction='none'))/(q2_std_detach +bias)
                             ))

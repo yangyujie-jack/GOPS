@@ -5,10 +5,6 @@
 #  Creator: iDLab
 #  Lab Leader: Prof. Shengbo Eben Li
 #  Email: lisb04@gmail.com
-#
-#  Description: example for ppo + pendulum+ mlp + on_serial
-#  Update Date: 2021-06-11, Li Jie: create example
-
 
 import argparse
 
@@ -30,7 +26,7 @@ if __name__ == "__main__":
     ################################################
     # Key Parameters for users
     parser.add_argument("--env_id", type=str, default="gym_ant", help="id of environment")
-    parser.add_argument("--algorithm", type=str, default="PPO", help="RL algorithm")
+    parser.add_argument("--algorithm", type=str, default="DPPO", help="RL algorithm")
     parser.add_argument("--enable_cuda", default=False, help="Disable CUDA")
 
     ################################################
@@ -43,7 +39,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--value_func_name",
         type=str,
-        default="StateValue",
+        default="StateValueDistri",
         help="Options: StateValue/ActionValue/ActionValueDis/ActionValueDistri",
     )
     parser.add_argument("--value_func_type", type=str, default="MLP", help="Options: MLP/CNN/CNN_SHARED/RNN/POLY/GAUSS")
@@ -116,7 +112,7 @@ if __name__ == "__main__":
 
     ################################################
     # 5. Parameters for sampler
-    parser.add_argument("--sampler_name", type=str, default="on_sampler")
+    parser.add_argument("--sampler_name", type=str, default="on_d_sampler")
     # Batch size of sampler for buffer store
     parser.add_argument(
         "--sample_batch_size", type=int, default=2000, help="Batch size of sampler for buffer store = 1024",

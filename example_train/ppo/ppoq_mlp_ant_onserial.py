@@ -30,7 +30,8 @@ if __name__ == "__main__":
     ################################################
     # Key Parameters for users
     parser.add_argument("--env_id", type=str, default="gym_ant", help="id of environment")
-    parser.add_argument("--algorithm", type=str, default="PPO", help="RL algorithm")
+    parser.add_argument("--algorithm", type=str, default="PPOQ", help="RL algorithm")
+    parser.add_argument("--description", type=str, default="original")
     parser.add_argument("--enable_cuda", default=False, help="Disable CUDA")
 
     ################################################
@@ -43,7 +44,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--value_func_name",
         type=str,
-        default="StateValue",
+        default="ActionValue",
         help="Options: StateValue/ActionValue/ActionValueDis/ActionValueDistri",
     )
     parser.add_argument("--value_func_type", type=str, default="MLP", help="Options: MLP/CNN/CNN_SHARED/RNN/POLY/GAUSS")
@@ -104,7 +105,7 @@ if __name__ == "__main__":
     )
 
     # 4.1. Parameters for on_serial_trainer
-    parser.add_argument("--num_repeat", type=int, default=20)
+    parser.add_argument("--num_repeat", type=int, default=10)
     parser.add_argument("--num_mini_batch", type=int, default=1)
     parser.add_argument("--mini_batch_size", type=int, default=2000)
     parser.add_argument(
@@ -116,7 +117,7 @@ if __name__ == "__main__":
 
     ################################################
     # 5. Parameters for sampler
-    parser.add_argument("--sampler_name", type=str, default="on_sampler")
+    parser.add_argument("--sampler_name", type=str, default="on_q_sampler")
     # Batch size of sampler for buffer store
     parser.add_argument(
         "--sample_batch_size", type=int, default=2000, help="Batch size of sampler for buffer store = 1024",
