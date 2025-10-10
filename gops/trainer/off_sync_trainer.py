@@ -107,7 +107,7 @@ class OffSyncTrainer:
         self._set_algs()
 
         # create evaluation tasks
-        self.evluate_tasks = TaskPool()
+        self.evaluate_tasks = TaskPool()
         self.last_eval_iteration = 0
 
         self.start_time = time.time()
@@ -222,12 +222,12 @@ class OffSyncTrainer:
 
         # evaluate
         if self.iteration - self.last_eval_iteration >= self.eval_interval:
-            if self.evluate_tasks.count == 0:
+            if self.evaluate_tasks.count == 0:
                 # There is no evaluation task, add one.
                 self._add_eval_task()
-            elif self.evluate_tasks.completed_num == 1:
+            elif self.evaluate_tasks.completed_num == 1:
                 # Evaluation tasks is completed, log data and add another one.
-                objID = next(self.evluate_tasks.completed())[1]
+                objID = next(self.evaluate_tasks.completed())[1]
                 total_avg_return = ray.get(objID)
                 self._add_eval_task()
 
@@ -298,7 +298,7 @@ class OffSyncTrainer:
 
     def _add_eval_task(self):
         self.evaluator.load_state_dict.remote(self.networks.state_dict())
-        self.evluate_tasks.add(
+        self.evaluate_tasks.add(
             self.evaluator,
             self.evaluator.run_evaluation.remote(self.iteration)
         )
