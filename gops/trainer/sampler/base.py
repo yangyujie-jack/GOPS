@@ -103,22 +103,17 @@ class BaseSampler(metaclass=ABCMeta):
     
     def _step(self) -> List[Experience]:
         # take action using behavior policy
+        obs = torch.from_numpy(self.obs).float()
         if not self._is_vector:
-            batch_obs = torch.from_numpy(
-                np.expand_dims(self.obs, axis=0).astype("float32")
-            )
-        else:
-            batch_obs = torch.from_numpy(self.obs.astype("float32"))
-        logits = self.networks.policy(batch_obs)
-        action_distribution = self.networks.create_action_distributions(logits)
-        action, logp = action_distribution.sample()
+            obs = obs.unsqueeze(0)
 
-        if self._is_vector:
-            action = action.detach().numpy()
-            logp = logp.detach().numpy()
-        else:
-            action = action.detach()[0].numpy()
-            logp = logp.detach()[0].numpy()
+        with torch.no_grad():
+            logits = self.networks.policy(obs)
+        if not self._is_vector:
+            logits = logits.squeeze(0)
+        action, logp = self.networks.create_action_distributions(logits).sample()
+        action = action.numpy()
+        logp = logp.numpy()
 
         if self.noise_params is not None:
             action = self.noise_processor.sample(action)

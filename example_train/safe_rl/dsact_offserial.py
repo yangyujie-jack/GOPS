@@ -95,7 +95,6 @@ if __name__ == "__main__":
         type=str,
         default=None
     )
-    trainer_type = parser.parse_known_args()[0].trainer
 
     # 4.1. Parameters for off_serial_trainer
     parser.add_argument(

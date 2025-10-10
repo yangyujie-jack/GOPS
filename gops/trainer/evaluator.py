@@ -59,11 +59,9 @@ class Evaluator:
         done = 0
         info["TimeLimit.truncated"] = False
         while not (done or info["TimeLimit.truncated"]):
-            batch_obs = torch.from_numpy(np.expand_dims(obs, axis=0).astype("float32"))
-            logits = self.networks.policy(batch_obs)
-            action_distribution = self.networks.create_action_distributions(logits)
-            action = action_distribution.mode()
-            action = action.detach().numpy()[0]
+            with torch.no_grad():
+                logits = self.networks.policy(torch.from_numpy(obs).float().unsqueeze(0)).squeeze(0)
+            action = self.networks.create_action_distributions(logits).mode().numpy()
             next_obs, reward, done, next_info = self.env.step(action)
             obs_list.append(obs)
             action_list.append(action)
