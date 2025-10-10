@@ -58,6 +58,17 @@ pip install -e .
 conda install -c conda-forge cyipopt
 ```
 
+## Installation (Safe RL)
+1. Install safe-rl-env
+2. Install remaining necessary packages for GOPS
+```bash
+pip install ray gym==0.23.1 pandas
+```
+3. Install GOPS
+```bash
+pip install --no-deps -e .
+```
+
 ## Documentation
 The tutorials and API documentation are hosted on [gops.readthedocs.io](https://gops.readthedocs.io/en/latest/).
 
