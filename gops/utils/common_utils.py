@@ -15,7 +15,7 @@ import os
 import torch.nn as nn
 import numpy as np
 import logging
-from typing import Optional
+from typing import Optional, Tuple
 
 from gops.utils.act_distribution_type import *
 import random
@@ -200,6 +200,13 @@ def seed_everything(seed: Optional[int] = None) -> int:
     torch.cuda.manual_seed_all(seed)
 
     return seed
+
+
+def seeding(seed: Optional[int] = None) -> Tuple[np.random.Generator, int]:
+    seed_seq = np.random.SeedSequence(seed)
+    seed = seed_seq.entropy
+    bit_generator = np.random.PCG64(seed)
+    return np.random.Generator(bit_generator), seed
 
 
 def set_seed(trainer_name, seed, offset, env=None):

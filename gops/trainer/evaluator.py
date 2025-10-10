@@ -12,7 +12,7 @@ import torch
 
 from gops.create_pkg.create_env import create_env
 from gops.create_pkg.create_alg import create_approx_contrainer
-from gops.utils.common_utils import set_seed
+from gops.utils.common_utils import set_seed, seeding
 
 
 class Evaluator:
@@ -25,7 +25,8 @@ class Evaluator:
         })
         self.env = create_env(**kwargs)
 
-        _, self.env = set_seed(kwargs["trainer"], kwargs["seed"], index + 400, self.env)
+        set_seed(kwargs["trainer"], kwargs["seed"], index + 400)
+        self.rng, _ = seeding(kwargs["seed"] + index + 400)
 
         self.networks = create_approx_contrainer(**kwargs)
         self.render = kwargs["is_render"]
@@ -51,7 +52,7 @@ class Evaluator:
         obs_list = []
         action_list = []
         reward_list = []
-        obs, info = self.env.reset()
+        obs, info = self.env.reset(seed=int(self.rng.integers(0, 2 ** 32 - 1)))
         done = 0
         info["TimeLimit.truncated"] = False
         while not (done or info["TimeLimit.truncated"]):

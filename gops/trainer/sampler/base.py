@@ -20,7 +20,7 @@ import torch
 from gops.create_pkg.create_env import create_env
 from gops.create_pkg.create_alg import create_approx_contrainer
 from gops.env.vector.vector_env import VectorEnv
-from gops.utils.common_utils import set_seed
+from gops.utils.common_utils import set_seed, seeding
 from gops.utils.explore_noise import GaussNoise, EpsilonGreedy
 from gops.utils.tensorboard_setup import tb_tags
 
@@ -45,7 +45,10 @@ class BaseSampler(metaclass=ABCMeta):
         **kwargs
     ):
         self.env = create_env(**kwargs)
-        _, self.env = set_seed(kwargs["trainer"], kwargs["seed"], index + 200, self.env)  #? seed here?
+        set_seed(kwargs["trainer"], kwargs["seed"], index + 200)
+        self.rng, _ = seeding(kwargs["seed"] + index + 200)
+        self.env.action_space.seed(int(self.rng.integers(0, 2 ** 32 - 1)))
+
         self.networks = create_approx_contrainer(**kwargs)
         self.noise_params = noise_params
         self.sample_batch_size = sample_batch_size
@@ -69,7 +72,7 @@ class BaseSampler(metaclass=ABCMeta):
                 self.noise_processor = EpsilonGreedy(**self.noise_params)
         
         self.total_sample_number = 0
-        self.obs, self.info = self.env.reset()
+        self.obs, self.info = self.env.reset(seed=int(self.rng.integers(0, 2 ** 32 - 1)))
         if self._is_vector:
             # convert a dict of batched data to a list of dict of unbatched data
             # e.g. next_info = {"a": [1, 2, 3], "b": [4, 5, 6]} ->
@@ -183,6 +186,6 @@ class BaseSampler(metaclass=ABCMeta):
             self.obs = next_obs
             self.info = next_info
             if done or next_info["TimeLimit.truncated"]:
-                self.obs, self.info = self.env.reset()
+                self.obs, self.info = self.env.reset(seed=int(self.rng.integers(0, 2 ** 32 - 1)))
 
             return [experience]
