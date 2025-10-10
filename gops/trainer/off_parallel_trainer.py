@@ -1,0 +1,181 @@
+#  Copyright (c). All Rights Reserved.
+#  General Optimal control Problem Solver (GOPS)
+#  Intelligent Driving Lab (iDLab), Tsinghua University
+#
+#  Creator: iDLab
+#  Lab Leader: Prof. Shengbo Eben Li
+#  Email: lisb04@gmail.com
+
+__all__ = ["OffParallelTrainer"]
+
+import os
+import time
+from cmath import inf
+from tqdm import tqdm
+
+import ray
+import torch
+from torch.utils.tensorboard import SummaryWriter
+
+from gops.trainer.evaluator import Evaluator
+from gops.utils.common_utils import ModuleOnDevice
+from gops.utils.tensorboard_setup import add_scalars, tb_tags
+from gops.utils.log_data import LogData
+
+
+class OffParallelTrainer:
+    def __init__(self, alg, sampler, buffer, evaluator: Evaluator, **kwargs):
+        self.alg = alg
+        self.sampler = sampler
+        self.buffer = buffer
+        self.per_flag = kwargs["buffer_name"] == "prioritized_replay_buffer"
+        self.evaluator = evaluator
+
+        # create center network
+        self.networks = self.alg.networks
+
+        # initialize center network
+        if kwargs.get("ini_network_dir") is not None:
+            self.networks.load_state_dict(torch.load(kwargs["ini_network_dir"]))
+
+        self.replay_batch_size = kwargs["replay_batch_size"]
+        self.max_iteration = kwargs["max_iteration"]
+        self.sample_interval = kwargs.get("sample_interval", 1)
+        self.log_save_interval = kwargs["log_save_interval"]
+        self.apprfunc_save_interval = kwargs["apprfunc_save_interval"]
+        self.eval_interval = kwargs["eval_interval"]
+        self.best_tar = -inf
+        self.save_folder = kwargs["save_folder"]
+        self.iteration = 0
+
+        self.sampler_tb_dict = LogData()
+        self.alg_tb_dict = LogData()
+        self.writer = SummaryWriter(log_dir=self.save_folder, flush_secs=20)
+
+        # pre sampling
+        ray.get(self.sampler.load_state_dict.remote(self.networks.state_dict()))
+        with tqdm(total=kwargs["buffer_warm_size"], desc="Pre-sampling") as pbar:
+            while self.buffer.size < kwargs["buffer_warm_size"]:
+                samples, _ = ray.get(self.sampler.sample.remote())
+                self.buffer.add_batch(samples)
+                pbar.update(len(samples))
+
+        self.sample_task_id = None
+        self.eval_task_id = None
+        self.last_eval_iteration = 0
+
+        self.use_gpu = kwargs["use_gpu"]
+        if self.use_gpu:
+            self.networks.cuda()
+
+        self.start_time = time.time()
+
+    def step(self):
+        # sampling
+        if self.iteration % self.sample_interval == 0:
+            if self.sample_task_id is not None:
+                sampler_samples, sampler_tb_dict = ray.get(self.sample_task_id)
+                self.buffer.add_batch(sampler_samples)
+                self.sampler_tb_dict.add_average(sampler_tb_dict)
+            with ModuleOnDevice(self.networks, "cpu"):
+                ray.get(self.sampler.load_state_dict.remote(self.networks.state_dict()))
+            self.sample_task_id = self.sampler.sample.remote()
+
+        # replay
+        replay_samples = self.buffer.sample_batch(self.replay_batch_size)
+
+        # learning
+        if self.use_gpu:
+            for k, v in replay_samples.items():
+                replay_samples[k] = v.cuda()
+
+        self.networks.train()
+        if self.per_flag:
+            alg_tb_dict, idx, new_priority = self.alg.local_update(
+                replay_samples, self.iteration
+            )
+            self.buffer.update_batch(idx, new_priority)
+        else:
+            alg_tb_dict = self.alg.local_update(replay_samples, self.iteration)
+        self.networks.eval()
+        self.alg_tb_dict.add_average(alg_tb_dict)
+
+        self.iteration += 1
+
+        # log
+        if self.iteration % self.log_save_interval == 0:
+            add_scalars(self.alg_tb_dict.pop(), self.writer, step=self.iteration)
+            add_scalars(self.sampler_tb_dict.pop(), self.writer, step=self.iteration)
+
+        # save
+        if self.iteration % self.apprfunc_save_interval == 0:
+            self.save_apprfunc()
+
+        # evaluate
+        if self.iteration % self.eval_interval == 0:
+            if self.eval_task_id is not None:
+                self._log_eval_result(ray.get(self.eval_task_id))
+            with ModuleOnDevice(self.networks, "cpu"):
+                ray.get(self.evaluator.load_state_dict.remote(self.networks.state_dict()))
+            self.eval_task_id = self.evaluator.run_evaluation.remote(self.iteration)
+            self.last_eval_iteration = self.iteration
+
+    def train(self):
+        for _ in tqdm(range(self.max_iteration), desc="Training"):
+            self.step()
+
+        self.save_apprfunc()
+        self._log_eval_result(ray.get(self.eval_task_id))
+        self.writer.flush()
+
+    def save_apprfunc(self):
+        torch.save(
+            self.networks.state_dict(),
+            self.save_folder + "/apprfunc/apprfunc_{}.pkl".format(self.iteration),
+        )
+
+    def _log_eval_result(self, eval_result):
+        constraint = isinstance(eval_result, tuple)
+        if constraint:
+            total_avg_return, total_avg_violation = eval_result
+        else:
+            total_avg_return = eval_result
+
+        if (
+            not constraint
+            and total_avg_return >= self.best_tar
+            and self.last_eval_iteration >= self.max_iteration / 5
+        ):
+            self.best_tar = total_avg_return
+
+            for filename in os.listdir(self.save_folder + "/apprfunc/"):
+                if filename.endswith("_opt.pkl"):
+                    os.remove(self.save_folder + "/apprfunc/" + filename)
+
+            torch.save(
+                self.evaluator.networks.state_dict(),
+                self.save_folder
+                + "/apprfunc/apprfunc_{}_opt.pkl".format(self.last_eval_iteration),
+            )
+
+        self.writer.add_scalar(
+            tb_tags["Buffer RAM of RL iteration"],
+            self.buffer.__get_RAM__(),
+            self.last_eval_iteration,
+        )
+        tag_prefix_yaxis = {
+            "TAR": total_avg_return,
+        }
+        if constraint:
+            tag_prefix_yaxis.update({
+                "TAV": total_avg_violation,
+            })
+        tag_suffix_xaxis = {
+            "RL iteration": self.last_eval_iteration,
+            "replay samples": self.last_eval_iteration * self.replay_batch_size,
+            "total time": int(time.time() - self.start_time),
+            "collected samples": ray.get(self.sampler.get_total_sample_number.remote()),
+        }
+        for tp, y in tag_prefix_yaxis.items():
+            for ts, x in tag_suffix_xaxis.items():
+                self.writer.add_scalar(tb_tags[" of ".join([tp, ts])], y, x)
