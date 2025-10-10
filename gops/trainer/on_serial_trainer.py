@@ -38,7 +38,7 @@ class OnSerialTrainer:
         self.sampler.networks = self.networks
 
         # initialize center network
-        if kwargs["ini_network_dir"] is not None:
+        if kwargs.get("ini_network_dir") is not None:
             self.networks.load_state_dict(torch.load(kwargs["ini_network_dir"]))
 
         self.max_iteration = kwargs.get("max_iteration")

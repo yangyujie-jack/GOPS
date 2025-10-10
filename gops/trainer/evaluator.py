@@ -16,7 +16,14 @@ from gops.utils.common_utils import set_seed, seeding
 
 
 class Evaluator:
-    def __init__(self, index=0, constraint: bool = False, **kwargs):
+    def __init__(
+        self,
+        index=0,
+        is_render: bool = False,
+        eval_save: bool = False,
+        constraint: bool = False,
+        **kwargs,
+    ):
         kwargs.update({
             "reward_scale": None,
             "repeat_num": None,
@@ -29,13 +36,13 @@ class Evaluator:
         self.rng, _ = seeding(kwargs["seed"] + index + 400)
 
         self.networks = create_approx_contrainer(**kwargs)
-        self.render = kwargs["is_render"]
+        self.render = is_render
 
         self.num_eval_episode = kwargs["num_eval_episode"]
         self.action_type = kwargs["action_type"]
         self.policy_func_name = kwargs["policy_func_name"]
         self.save_folder = kwargs["save_folder"]
-        self.eval_save = kwargs.get("eval_save", True)
+        self.eval_save = eval_save
         self.constraint = constraint
 
         self.print_time = 0

@@ -104,7 +104,7 @@ def init_args(env, **args):
         args["cnn_shared"] = False
 
     # Create save arguments
-    if args["save_folder"] is None:
+    if args.get("save_folder") is None:
         dir_path = os.path.dirname(__file__)
         dir_path = os.path.dirname(dir_path)
         dir_path = os.path.dirname(dir_path)

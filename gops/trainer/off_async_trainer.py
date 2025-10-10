@@ -58,7 +58,7 @@ class OffAsyncTrainer:
             raise NotImplementedError("This algorithm is not properly defined")
 
         # initialize center network
-        if kwargs["ini_network_dir"] is not None:
+        if kwargs.get("ini_network_dir") is not None:
             self.networks.load_state_dict(torch.load(kwargs["ini_network_dir"]))
 
         self.replay_batch_size = kwargs["replay_batch_size"]
