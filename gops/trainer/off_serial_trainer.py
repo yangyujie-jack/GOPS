@@ -59,9 +59,11 @@ class OffSerialTrainer:
         self.writer = SummaryWriter(log_dir=self.save_folder, flush_secs=20)
 
         # pre sampling
-        while self.buffer.size < kwargs["buffer_warm_size"]:
-            samples, _ = self.sampler.sample()
-            self.buffer.add_batch(samples)
+        with tqdm(total=kwargs["buffer_warm_size"], desc="Pre-sampling") as pbar:
+            while self.buffer.size < kwargs["buffer_warm_size"]:
+                samples, _ = self.sampler.sample()
+                self.buffer.add_batch(samples)
+                pbar.update(len(samples))
 
         self.eval_task_id = None
         self.last_eval_iteration = 0
@@ -114,7 +116,8 @@ class OffSerialTrainer:
         if self.iteration % self.eval_interval == 0:
             if self.eval_task_id is not None:
                 self._log_eval_result(ray.get(self.eval_task_id))
-            self.evaluator.load_state_dict.remote(self.networks.state_dict())
+            with ModuleOnDevice(self.networks, "cpu"):
+                ray.get(self.evaluator.load_state_dict.remote(self.networks.state_dict()))
             self.eval_task_id = self.evaluator.run_evaluation.remote(self.iteration)
             self.last_eval_iteration = self.iteration
 
