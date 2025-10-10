@@ -125,6 +125,7 @@ class DSACT(AlgorithmBase):
             "delay_update",
         )
 
+    @torch.compile
     def local_update(self, data: DataDict, iteration: int) -> dict:
         tb_info = self._compute_gradient(data, iteration)
         self._update(iteration)
@@ -168,7 +169,7 @@ class DSACT(AlgorithmBase):
         if requires_grad:
             return alpha
         else:
-            return alpha.item()
+            return alpha.detach()
 
     def _compute_gradient(self, data: DataDict, iteration: int):
         start_time = time.time()
@@ -176,8 +177,8 @@ class DSACT(AlgorithmBase):
         obs = data["obs"]
         logits = self.networks.policy(obs)
         logits_mean, logits_std = torch.chunk(logits, chunks=2, dim=-1)
-        policy_mean = torch.tanh(logits_mean).mean().item()
-        policy_std = logits_std.mean().item()
+        policy_mean = torch.tanh(logits_mean).mean().detach()
+        policy_std = logits_std.mean().detach()
 
         act_dist = self.networks.create_action_distributions(logits)
         new_act, new_log_prob = act_dist.rsample()
@@ -217,12 +218,12 @@ class DSACT(AlgorithmBase):
             "DSAC2/critic_avg_min_std2-RL iter": min_std2.item(),
             tb_tags["loss_actor"]: loss_policy.item(),
             tb_tags["loss_critic"]: loss_q.item(),
-            "DSAC2/policy_mean-RL iter": policy_mean,
-            "DSAC2/policy_std-RL iter": policy_std,
+            "DSAC2/policy_mean-RL iter": policy_mean.item(),
+            "DSAC2/policy_std-RL iter": policy_std.item(),
             "DSAC2/entropy-RL iter": entropy.item(),
-            "DSAC2/alpha-RL iter": self._get_alpha(),
-            "DSAC2/mean_std1": self.mean_std1,
-            "DSAC2/mean_std2": self.mean_std2,
+            "DSAC2/alpha-RL iter": self._get_alpha().item(),
+            "DSAC2/mean_std1": self.mean_std1.item(),
+            "DSAC2/mean_std2": self.mean_std2.item(),
             tb_tags["alg_time"]: (time.time() - start_time) * 1000,
         }
 

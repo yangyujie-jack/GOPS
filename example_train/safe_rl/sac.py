@@ -23,34 +23,33 @@ if __name__ == "__main__":
     # Key Parameters
     parser.add_argument("--env_id", type=str, default="safe_rl")
     parser.add_argument("--safe_rl_env_id", type=str, default="Safety-Gymnasium-SafetyPointGoal1-v0")
-    parser.add_argument("--algorithm", type=str, default="DSACT")
+    parser.add_argument("--algorithm", type=str, default="SAC")
     parser.add_argument("--enable_cuda", action="store_true")
     parser.add_argument("--seed", type=int, default=1)
 
     # Parameters of approximate function
-    parser.add_argument("--value_func_name", type=str, default="ActionValueDistri")
+    parser.add_argument("--value_func_name", type=str, default="ActionValue")
     parser.add_argument("--value_func_type", type=str, default="MLP")
     parser.add_argument("--value_hidden_sizes", type=list, default=[256, 256])
-    parser.add_argument("--value_hidden_activation", type=str, default="gelu")
+    parser.add_argument("--value_hidden_activation", type=str, default="relu")
     parser.add_argument("--policy_func_name", type=str, default="StochaPolicy")
     parser.add_argument("--policy_func_type", type=str, default="MLP")
     parser.add_argument("--policy_act_distribution", type=str, default="TanhGaussDistribution")
     parser.add_argument("--policy_hidden_sizes", type=list, default=[256, 256])
-    parser.add_argument("--policy_hidden_activation", type=str, default="gelu")
+    parser.add_argument("--policy_hidden_activation", type=str, default="relu")
     parser.add_argument("--policy_min_log_std", type=float, default=-20.)
     parser.add_argument("--policy_max_log_std", type=float, default=2.)
 
     # Parameters for RL algorithm
-    parser.add_argument("--value_learning_rate", type=float, default=0.0001)
+    parser.add_argument("--q_learning_rate", type=float, default=0.0001)
     parser.add_argument("--policy_learning_rate", type=float, default=0.0001)
-    parser.add_argument("--alpha_learning_rate", type=float, default=0.0003)
+    parser.add_argument("--alpha_learning_rate", type=float, default=0.0001)
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--tau", type=float, default=0.005)
     parser.add_argument("--auto_alpha", type=bool, default=True)
-    parser.add_argument("--delay_update", type=int, default=2)
 
     # Parameters for trainer
-    parser.add_argument("--trainer", type=str, default="off_parallel_trainer")
+    parser.add_argument("--trainer", type=str, default="off_serial_trainer")
     parser.add_argument("--max_iteration", type=int, default=1000000)
     parser.add_argument("--buffer_name", type=str, default="replay_buffer")
     parser.add_argument("--buffer_warm_size", type=int, default=10000)

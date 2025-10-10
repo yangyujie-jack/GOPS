@@ -109,6 +109,7 @@ class SAC(AlgorithmBase):
     def adjustable_parameters(self):
         return ("gamma", "tau", "alpha", "auto_alpha", "target_entropy")
 
+    @torch.compile
     def local_update(self, data: DataDict, iteration: int) -> dict:
         tb_info = self._compute_gradient(data, iteration)
         self._update(iteration)
@@ -152,7 +153,7 @@ class SAC(AlgorithmBase):
         if requires_grad:
             return alpha
         else:
-            return alpha.item()
+            return alpha.detach()
 
     def _compute_gradient(self, data: DataDict, iteration: int):
         start_time = time.time()
@@ -193,7 +194,7 @@ class SAC(AlgorithmBase):
             "SAC/critic_avg_q1-RL iter": q1.item(),
             "SAC/critic_avg_q2-RL iter": q2.item(),
             "SAC/entropy-RL iter": entropy.item(),
-            "SAC/alpha-RL iter": self._get_alpha(),
+            "SAC/alpha-RL iter": self._get_alpha().item(),
             tb_tags["alg_time"]: (time.time() - start_time) * 1000,
         }
 
