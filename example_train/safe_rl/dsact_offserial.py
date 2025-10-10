@@ -145,7 +145,7 @@ if __name__ == "__main__":
     # Step 3: create buffer in trainer
     buffer = create_buffer(**args)
     # Step 4: create evaluator in trainer
-    evaluator = create_evaluator(**args)
+    evaluator = create_evaluator(**args, constraint=True)
     # Step 5: create trainer
     trainer = create_trainer(alg, sampler, buffer, evaluator, **args)
 

@@ -16,7 +16,7 @@ from gops.utils.common_utils import set_seed, seeding
 
 
 class Evaluator:
-    def __init__(self, index=0, **kwargs):
+    def __init__(self, index=0, constraint: bool = False, **kwargs):
         kwargs.update({
             "reward_scale": None,
             "repeat_num": None,
@@ -36,6 +36,7 @@ class Evaluator:
         self.policy_func_name = kwargs["policy_func_name"]
         self.save_folder = kwargs["save_folder"]
         self.eval_save = kwargs.get("eval_save", True)
+        self.constraint = constraint
 
         self.print_time = 0
         self.print_iteration = -1
@@ -52,6 +53,8 @@ class Evaluator:
         obs_list = []
         action_list = []
         reward_list = []
+        if self.constraint:
+            violation_list = []
         obs, info = self.env.reset(seed=int(self.rng.integers(0, 2 ** 32 - 1)))
         done = 0
         info["TimeLimit.truncated"] = False
@@ -72,6 +75,8 @@ class Evaluator:
             if render:
                 self.env.render()
             reward_list.append(reward)
+            if self.constraint:
+                violation_list.append(float(info["constraint"] > 0))
         eval_dict = {
             "reward_list": reward_list,
             "action_list": action_list,
@@ -84,13 +89,28 @@ class Evaluator:
                 eval_dict,
             )
         episode_return = sum(reward_list)
-        return episode_return
+        if self.constraint:
+            episode_violation = sum(violation_list)
+            return episode_return, episode_violation
+        else:
+            return episode_return
 
     def run_n_episodes(self, n, iteration):
         episode_return_list = []
+        if self.constraint:
+            episode_violation_list = []
         for _ in range(n):
-            episode_return_list.append(self.run_an_episode(iteration, self.render))
-        return np.mean(episode_return_list)
+            episode_result = self.run_an_episode(iteration, self.render)
+            if self.constraint:
+                episode_return, episode_violation = episode_result
+                episode_return_list.append(episode_return)
+                episode_violation_list.append(episode_violation)
+            else:
+                episode_return_list.append(episode_result)
+        if self.constraint:
+            return np.mean(episode_return_list), np.mean(episode_violation_list)
+        else:
+            return np.mean(episode_return_list)
 
     def run_evaluation(self, iteration):
         return self.run_n_episodes(self.num_eval_episode, iteration)

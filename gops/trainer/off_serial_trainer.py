@@ -155,10 +155,15 @@ class OffSerialTrainer:
         self.last_eval_iteration = self.iteration
 
     def _log_eval_result(self, eval_result):
-        total_avg_return = eval_result
+        constraint = isinstance(eval_result, tuple)
+        if constraint:
+            total_avg_return, total_avg_violation = eval_result
+        else:
+            total_avg_return = eval_result
 
         if (
-            total_avg_return >= self.best_tar
+            not constraint
+            and total_avg_return >= self.best_tar
             and self.last_eval_iteration >= self.max_iteration / 5
         ):
             self.best_tar = total_avg_return
@@ -182,6 +187,10 @@ class OffSerialTrainer:
         tag_prefix_yaxis = {
             "TAR": total_avg_return,
         }
+        if constraint:
+            tag_prefix_yaxis.update({
+                "TAV": total_avg_violation,
+            })
         tag_suffix_xaxis = {
             "RL iteration": self.last_eval_iteration,
             "replay samples": self.last_eval_iteration * self.replay_batch_size,
