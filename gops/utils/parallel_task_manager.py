@@ -10,6 +10,8 @@
 #  Update: 2021-03-10, Yang Guan: Create codes
 
 
+from typing import Optional
+
 import ray
 
 
@@ -31,12 +33,12 @@ class TaskPool(object):
         self._tasks[obj_id] = worker
         self._objects[obj_id] = all_obj_ids
 
-    def completed(self, blocking_wait=False):
+    def completed(self, blocking_wait=False, timeout: Optional[float] = 10.):
         pending = list(self._tasks)
         if pending:
             ready, _ = ray.wait(pending, num_returns=len(pending), timeout=0)
             if not ready and blocking_wait:
-                ready, _ = ray.wait(pending, num_returns=1, timeout=10.0)
+                ready, _ = ray.wait(pending, num_returns=1, timeout=timeout)
             for obj_id in ready:
                 yield self._tasks.pop(obj_id), self._objects.pop(obj_id)
 
