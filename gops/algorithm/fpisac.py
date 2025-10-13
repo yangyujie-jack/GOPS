@@ -140,26 +140,25 @@ class FPISAC(SAC):
         return tb_info
 
     def _compute_loss_g(self, data: DataDict):
-        obs, act, constraint, obs2, done, next_act = (
+        obs, act, constraint, obs2, done = (
             data["obs"],
             data["act"],
             data["next_constraint"],
             data["obs2"],
             data["done"],
-            data["next_act"],
         )
-
+        g1 = self.networks.g1(obs, act)
+        g2 = self.networks.g2(obs, act)
         with torch.no_grad():
+            next_logits = self.networks.policy(obs2)
+            next_act_dist = self.networks.create_action_distributions(next_logits)
+            next_act, _ = next_act_dist.rsample()
             g1_next = self.networks.g1_target(obs2, next_act)
             g2_next = self.networks.g2_target(obs2, next_act)
             g_next = torch.clamp(torch.max(g1_next, g2_next), 0, 1)
             target_g = constraint + (1 - done) * (1 - constraint) * self.gamma_g * g_next
-
-        g1 = self.networks.g1(obs, act)
-        g2 = self.networks.g2(obs, act)
         g1_loss = ((g1 - target_g) ** 2).mean()
         g2_loss = ((g2 - target_g) ** 2).mean()
-
         return g1_loss + g2_loss, g1.mean().detach(), g2.mean().detach()
 
     def _compute_loss_policy(self, data: DataDict):
