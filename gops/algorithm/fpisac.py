@@ -1,5 +1,6 @@
 __all__ = ["ApproxContainer", "FPISAC"]
 
+import math
 import time
 from copy import deepcopy
 from typing import Optional
@@ -7,143 +8,121 @@ from typing import Optional
 import torch
 import torch.nn as nn
 from torch.optim import Adam
-from gops.algorithm.base import AlgorithmBase, ApprBase
+from gops.algorithm.sac import ApproxContainer as SACApproxContainer, SAC
 from gops.create_pkg.create_apprfunc import create_apprfunc
-from gops.utils.tensorboard_setup import tb_tags
-from gops.utils.gops_typing import DataDict
 from gops.utils.common_utils import get_apprfunc_dict
+from gops.utils.gops_typing import DataDict
+from gops.utils.math_utils import incremental_update
+from gops.utils.tensorboard_setup import tb_tags
 
 
-class ApproxContainer(ApprBase):
+class ApproxContainer(SACApproxContainer):
     def __init__(
         self,
         value_learning_rate: float,
-        scenery_learning_rate: float,
         policy_learning_rate: float,
         alpha_learning_rate: float,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
-        # create q networks
-        q_args = get_apprfunc_dict("value", **kwargs)
-        self.q1: nn.Module = create_apprfunc(**q_args)
-        self.q2: nn.Module = create_apprfunc(**q_args)
-        self.q1_target: nn.Module = deepcopy(self.q1)
-        self.q2_target: nn.Module = deepcopy(self.q2)
-
-        # create scenery networks
-        g_args = get_apprfunc_dict("scenery", **kwargs)
+        super().__init__(
+            value_learning_rate=value_learning_rate,
+            policy_learning_rate=policy_learning_rate,
+            alpha_learning_rate=alpha_learning_rate,
+            **kwargs,
+        )
+        # create feasibility networks
+        g_args = get_apprfunc_dict("value", **kwargs)
         self.g1: nn.Module = create_apprfunc(**g_args)
         self.g2: nn.Module = create_apprfunc(**g_args)
         self.g1_target: nn.Module = deepcopy(self.g1)
         self.g2_target: nn.Module = deepcopy(self.g2)
 
-        # create policy network
-        policy_args = get_apprfunc_dict("policy", **kwargs)
-        self.policy: nn.Module = create_apprfunc(**policy_args)
+        for p in self.g1_target.parameters():
+            p.requires_grad = False
+        for p in self.g2_target.parameters():
+            p.requires_grad = False
 
-        self.q1_target.requires_grad_(False)
-        self.q2_target.requires_grad_(False)
-        self.g1_target.requires_grad_(False)
-        self.g2_target.requires_grad_(False)
-
-        self.log_alpha = nn.Parameter(torch.tensor(0, dtype=torch.float32))
-
-        self.q1_optimizer = Adam(self.q1.parameters(), lr=value_learning_rate)
-        self.q2_optimizer = Adam(self.q2.parameters(), lr=value_learning_rate)
-        self.g1_optimizer = Adam(self.g1.parameters(), lr=scenery_learning_rate)
-        self.g2_optimizer = Adam(self.g2.parameters(), lr=scenery_learning_rate)
-        self.policy_optimizer = Adam(self.policy.parameters(), lr=policy_learning_rate)
-        self.alpha_optimizer = Adam([self.log_alpha], lr=alpha_learning_rate)
-
-    def create_action_distributions(self, logits):
-        return self.policy.get_act_dist(logits)
+        self.g1_optimizer = Adam(self.g1.parameters(), lr=value_learning_rate)
+        self.g2_optimizer = Adam(self.g2.parameters(), lr=value_learning_rate)
 
 
-class FPISAC(AlgorithmBase):
+class FPISAC(SAC):
     def __init__(
         self,
-        gamma: float,
-        gamma_g: float,
-        tau: float,
-        target_entropy: Optional[float] = None,
-        pf: float = 0.1,
         index: int = 0,
+        gamma: float = 0.99,
+        tau: float = 0.005,
+        alpha: float = 1.,
+        auto_alpha: bool = True,
+        target_entropy: Optional[float] = None,
+        gamma_g: float = 0.99,
+        pf: float = 0.1,
         **kwargs,
     ):
         super().__init__(index, **kwargs)
         self.networks = ApproxContainer(**kwargs)
+        self.networks.log_alpha.data.fill_(math.log(alpha))
         self.gamma = gamma
-        self.gamma_g = gamma_g
         self.tau = tau
+        self.auto_alpha = auto_alpha
         if target_entropy is None:
             self.target_entropy = -kwargs["action_dim"]
         else:
             self.target_entropy = target_entropy
+        self.gamma_g = gamma_g
         self.pf = pf
 
     @property
     def adjustable_parameters(self):
-        return ("gamma", "gamma_g", "tau", "target_entropy", "pf")
+        return super().adjustable_parameters + ("gamma_g", "pf")
 
-    @torch.compile
-    def local_update(self, data: DataDict, iteration: int) -> dict:
-        tb_info = self.__compute_gradient(data, iteration)
-        self.__update(iteration)
-        return tb_info
-
-    @property
-    def alpha(self):
-        return self.networks.log_alpha.exp().detach()
-
-    def __compute_gradient(self, data: DataDict, iteration: int):
+    def _compute_gradient(self, data: DataDict, iteration: int):
         start_time = time.time()
-        tb_info = {}
 
-        obs, obs2 = data["obs"], data["obs2"]
-
+        obs = data["obs"]
         logits = self.networks.policy(obs)
         act_dist = self.networks.create_action_distributions(logits)
         new_act, new_logp = act_dist.rsample()
         data.update({"new_act": new_act, "new_logp": new_logp})
 
-        with torch.no_grad():
-            next_logits = self.networks.policy(obs2)
-            next_act, next_logp = self.networks.create_action_distributions(next_logits).sample()
-        data.update({"next_act": next_act, "next_logp": next_logp})
-
         self.networks.q1_optimizer.zero_grad()
         self.networks.q2_optimizer.zero_grad()
+        loss_q, q1, q2 = self._compute_loss_q(data)
+        loss_q.backward()
+
         self.networks.g1_optimizer.zero_grad()
         self.networks.g2_optimizer.zero_grad()
+        loss_g, g1, g2 = self._compute_loss_g(data)
+        loss_g.backward()
+
+        for p in self.networks.q1.parameters():
+            p.requires_grad = False
+        for p in self.networks.q2.parameters():
+            p.requires_grad = False
+        for p in self.networks.g1.parameters():
+            p.requires_grad = False
+        for p in self.networks.g2.parameters():
+            p.requires_grad = False
+
         self.networks.policy_optimizer.zero_grad()
-        self.networks.alpha_optimizer.zero_grad()
+        loss_policy, (entropy, fea) = self._compute_loss_policy(data)
+        loss_policy.backward()
 
-        loss_q, q1, q2 = self.__compute_loss_q(data)
-        loss_g, g1, g2 = self.__compute_loss_g(data)
+        for p in self.networks.q1.parameters():
+            p.requires_grad = True
+        for p in self.networks.q2.parameters():
+            p.requires_grad = True
+        for p in self.networks.g1.parameters():
+            p.requires_grad = True
+        for p in self.networks.g2.parameters():
+            p.requires_grad = True
 
-        frozen_net = [
-            self.networks.q1,
-            self.networks.q2,
-            self.networks.g1,
-            self.networks.g2,
-        ]
-        for nn in frozen_net:
-            nn.requires_grad_(False)
+        if self.auto_alpha:
+            self.networks.alpha_optimizer.zero_grad()
+            loss_alpha = -self.networks.log_alpha * (self.target_entropy - entropy)
+            loss_alpha.backward()
 
-        loss_policy, (fea, entropy) = self.__compute_loss_policy(data)
-
-        for nn in frozen_net:
-            nn.requires_grad_(True)
-
-        loss_alpha = -self.networks.log_alpha * (self.target_entropy - entropy)
-
-        loss = loss_q + loss_g + loss_policy + loss_alpha
-
-        loss.backward()
-
-        tb_info.update({
+        tb_info = {
             tb_tags["loss_critic"]: loss_q.item(),
             tb_tags["loss_actor"]: loss_policy.item(),
             "Loss/Scenery loss-RL iter": loss_g.item(),
@@ -154,36 +133,13 @@ class FPISAC(AlgorithmBase):
             "SACFPI/entropy-RL iter": entropy.item(),
             "SACFPI/alpha-RL iter": self.alpha.item(),
             "SACFPI/violation-RL iter": data["next_constraint"].mean().item(),
-            "SACFPI/feasible-RL iter": fea.float().mean().item(),
+            "SACFPI/feasible-RL iter": fea.item(),
             tb_tags["alg_time"]: (time.time() - start_time) * 1000,
-        })
+        }
+
         return tb_info
 
-    def __compute_loss_q(self, data: DataDict):
-        obs, act, rew, obs2, done, next_act, next_logp = (
-            data["obs"],
-            data["act"],
-            data["rew"],
-            data["obs2"],
-            data["done"],
-            data["next_act"],
-            data["next_logp"],
-        )
-
-        with torch.no_grad():
-            q1_next = self.networks.q1_target(obs2, next_act)
-            q2_next = self.networks.q2_target(obs2, next_act)
-            q_next = torch.min(q1_next, q2_next) - self.alpha * next_logp
-            target_q = rew + (1 - done) * self.gamma * q_next
-
-        q1 = self.networks.q1(obs, act)
-        q2 = self.networks.q2(obs, act)
-        q1_loss = ((q1 - target_q) ** 2).mean()
-        q2_loss = ((q2 - target_q) ** 2).mean()
-
-        return q1_loss + q2_loss, q1.mean().detach(), q2.mean().detach()
-
-    def __compute_loss_g(self, data: DataDict):
+    def _compute_loss_g(self, data: DataDict):
         obs, act, constraint, obs2, done, next_act = (
             data["obs"],
             data["act"],
@@ -206,7 +162,7 @@ class FPISAC(AlgorithmBase):
 
         return g1_loss + g2_loss, g1.mean().detach(), g2.mean().detach()
 
-    def __compute_loss_policy(self, data: DataDict):
+    def _compute_loss_policy(self, data: DataDict):
         obs, new_act, new_logp = (
             data["obs"],
             data["new_act"],
@@ -221,26 +177,15 @@ class FPISAC(AlgorithmBase):
         q2 = self.networks.q2(obs, new_act)
         q = torch.min(q1, q2)
 
-        fea = g < self.pf
+        fea = g <= self.pf
         loss = ((fea * -q + ~fea * g + self.alpha * new_logp)).mean()
-        return loss, (fea, -new_logp.mean().detach())
+        return loss, (-new_logp.mean().detach(), fea.float().mean())
 
-    def __update(self, iteration: int):
-        self.networks.q1_optimizer.step()
-        self.networks.q2_optimizer.step()
+    def _update(self, iteration: int):
+        super()._update(iteration)
+
         self.networks.g1_optimizer.step()
         self.networks.g2_optimizer.step()
-        self.networks.policy_optimizer.step()
-        self.networks.alpha_optimizer.step()
 
-        incremental_update(self.networks.q1, self.networks.q1_target, self.tau)
-        incremental_update(self.networks.q2, self.networks.q2_target, self.tau)
         incremental_update(self.networks.g1, self.networks.g1_target, self.tau)
         incremental_update(self.networks.g2, self.networks.g2_target, self.tau)
-
-
-def incremental_update(net_from: nn.Module, net_to: nn.Module, tau: float):
-    poltak = 1 - tau
-    for (p, p_tar) in zip(net_from.parameters(), net_to.parameters()):
-        p_tar.data.mul_(poltak)
-        p_tar.data.add_(tau * p.data)
