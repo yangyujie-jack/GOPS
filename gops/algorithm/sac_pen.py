@@ -8,188 +8,39 @@
 
 __all__ = ["ApproxContainer", "SACPen"]
 
-import time
-from copy import deepcopy
 from typing import Any, Optional
 
-import torch
-import torch.nn as nn
-from torch.optim import Adam
-
-from gops.algorithm.base import AlgorithmBase, ApprBase
-from gops.create_pkg.create_apprfunc import create_apprfunc
-from gops.utils.tensorboard_setup import tb_tags
+from gops.algorithm.sac import ApproxContainer, SAC
 from gops.utils.gops_typing import DataDict
-from gops.utils.common_utils import get_apprfunc_dict
 
 
-class ApproxContainer(ApprBase):
-    """Approximate function container for SAC-Pen.
-
-    Contains one policy and two action values.
-    """
-
-    def __init__(
-        self,
-        value_learning_rate: float,
-        policy_learning_rate: float,
-        alpha_learning_rate: float,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        # create q networks
-        q_args = get_apprfunc_dict("value", **kwargs)
-        self.q1: nn.Module = create_apprfunc(**q_args)
-        self.q2: nn.Module = create_apprfunc(**q_args)
-        self.q1_target = deepcopy(self.q1)
-        self.q2_target = deepcopy(self.q2)
-
-        # create policy network
-        policy_args = get_apprfunc_dict("policy", **kwargs)
-        self.policy: nn.Module = create_apprfunc(**policy_args)
-
-        # set target networks gradients
-        for p in self.q1_target.parameters():
-            p.requires_grad = False
-        for p in self.q2_target.parameters():
-            p.requires_grad = False
-
-        # create entropy coefficient
-        self.log_alpha = nn.Parameter(torch.tensor(0, dtype=torch.float32))
-
-        # create optimizers
-        self.q1_optimizer = Adam(self.q1.parameters(), lr=value_learning_rate)
-        self.q2_optimizer = Adam(self.q2.parameters(), lr=value_learning_rate)
-        self.policy_optimizer = Adam(self.policy.parameters(), lr=policy_learning_rate)
-        self.alpha_optimizer = Adam([self.log_alpha], lr=alpha_learning_rate)
-
-    def create_action_distributions(self, logits):
-        return self.policy.get_act_dist(logits)
-
-
-class SACPen(AlgorithmBase):
+class SACPen(SAC):
     def __init__(
         self,
         index: int = 0,
         gamma: float = 0.99,
         tau: float = 0.005,
+        alpha: float = 1.,
+        auto_alpha: bool = True,
         target_entropy: Optional[float] = None,
         penalty: float = 1.,
         **kwargs: Any,
     ):
-        super().__init__(index, **kwargs)
-        self.networks = ApproxContainer(**kwargs)
-        self.gamma = gamma
-        self.tau = tau
-        if target_entropy is None:
-            self.target_entropy = -kwargs["action_dim"]
-        else:
-            self.target_entropy = target_entropy
+        super().__init__(
+            index=index,
+            gamma=gamma,
+            tau=tau,
+            alpha=alpha,
+            auto_alpha=auto_alpha,
+            target_entropy=target_entropy,
+            **kwargs,
+        )
         self.penalty = penalty
 
     @property
     def adjustable_parameters(self):
-        return ("gamma", "tau", "target_entropy", "penalty")
-
-    @torch.compile
-    def local_update(self, data: DataDict, iteration: int) -> dict:
-        tb_info = self._compute_gradient(data, iteration)
-        self._update(iteration)
-        return tb_info
-
-    @property
-    def alpha(self):
-        return self.networks.log_alpha.exp().detach()
-
-    def _compute_gradient(self, data: DataDict, iteration: int):
-        start_time = time.time()
-
-        obs = data["obs"]
-        logits = self.networks.policy(obs)
-        act_dist = self.networks.create_action_distributions(logits)
-        new_act, new_logp = act_dist.rsample()
-        data.update({"new_act": new_act, "new_logp": new_logp})
-
-        self.networks.q1_optimizer.zero_grad()
-        self.networks.q2_optimizer.zero_grad()
-        loss_q, q1, q2 = self._compute_loss_q(data)
-        loss_q.backward()
-
-        for p in self.networks.q1.parameters():
-            p.requires_grad = False
-        for p in self.networks.q2.parameters():
-            p.requires_grad = False
-
-        self.networks.policy_optimizer.zero_grad()
-        loss_policy, entropy = self._compute_loss_policy(data)
-        loss_policy.backward()
-
-        for p in self.networks.q1.parameters():
-            p.requires_grad = True
-        for p in self.networks.q2.parameters():
-            p.requires_grad = True
-
-        self.networks.alpha_optimizer.zero_grad()
-        loss_alpha = -self.networks.log_alpha * (self.target_entropy - entropy)
-        loss_alpha.backward()
-
-        tb_info = {
-            tb_tags["loss_critic"]: loss_q.item(),
-            tb_tags["loss_actor"]: loss_policy.item(),
-            "SAC/critic_avg_q1-RL iter": q1.item(),
-            "SAC/critic_avg_q2-RL iter": q2.item(),
-            "SAC/entropy-RL iter": entropy.item(),
-            "SAC/alpha-RL iter": self.alpha.item(),
-            tb_tags["alg_time"]: (time.time() - start_time) * 1000,
-        }
-        return tb_info
+        return super().adjustable_parameters + ("penalty",)
 
     def _compute_loss_q(self, data: DataDict):
-        obs, act, rew, constraint, obs2, done = (
-            data["obs"],
-            data["act"],
-            data["rew"],
-            data["next_constraint"],
-            data["obs2"],
-            data["done"],
-        )
-        rew = rew - self.penalty * constraint
-        q1 = self.networks.q1(obs, act)
-        q2 = self.networks.q2(obs, act)
-        with torch.no_grad():
-            next_logits = self.networks.policy(obs2)
-            next_act_dist = self.networks.create_action_distributions(next_logits)
-            next_act, next_logp = next_act_dist.rsample()
-            next_q1 = self.networks.q1_target(obs2, next_act)
-            next_q2 = self.networks.q2_target(obs2, next_act)
-            next_q = torch.min(next_q1, next_q2)
-            backup = rew + (1 - done) * self.gamma * (
-                next_q - self.alpha * next_logp
-            )
-        loss_q1 = ((q1 - backup) ** 2).mean()
-        loss_q2 = ((q2 - backup) ** 2).mean()
-        return loss_q1 + loss_q2, q1.detach().mean(), q2.detach().mean()
-
-    def _compute_loss_policy(self, data: DataDict):
-        obs, new_act, new_logp = data["obs"], data["new_act"], data["new_logp"]
-        q1 = self.networks.q1(obs, new_act)
-        q2 = self.networks.q2(obs, new_act)
-        loss_policy = (self.alpha * new_logp - torch.min(q1, q2)).mean()
-        entropy = -new_logp.detach().mean()
-        return loss_policy, entropy
-
-    def _update(self, iteration: int):
-        self.networks.q1_optimizer.step()
-        self.networks.q2_optimizer.step()
-        self.networks.policy_optimizer.step()
-        self.networks.alpha_optimizer.step()
-
-        incremental_update(self.networks.q1, self.networks.q1_target, self.tau)
-        incremental_update(self.networks.q2, self.networks.q2_target, self.tau)
-
-
-def incremental_update(net_from: nn.Module, net_to: nn.Module, tau: float):
-    poltak = 1 - tau
-    for (p, p_tar) in zip(net_from.parameters(), net_to.parameters()):
-        p_tar.data.mul_(poltak)
-        p_tar.data.add_(tau * p.data)
+        data["rew"] = data["rew"] - self.penalty * data["next_constraint"]
+        return super()._compute_loss_q(data)

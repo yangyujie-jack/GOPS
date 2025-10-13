@@ -41,12 +41,9 @@ if __name__ == "__main__":
     parser.add_argument("--policy_max_log_std", type=float, default=2.)
 
     # Parameters for RL algorithm
-    parser.add_argument("--q_learning_rate", type=float, default=0.0001)
+    parser.add_argument("--value_learning_rate", type=float, default=0.0001)
     parser.add_argument("--policy_learning_rate", type=float, default=0.0001)
     parser.add_argument("--alpha_learning_rate", type=float, default=0.0001)
-    parser.add_argument("--gamma", type=float, default=0.99)
-    parser.add_argument("--tau", type=float, default=0.005)
-    parser.add_argument("--auto_alpha", type=bool, default=True)
 
     # Parameters for trainer
     parser.add_argument("--trainer", type=str, default="off_serial_trainer")

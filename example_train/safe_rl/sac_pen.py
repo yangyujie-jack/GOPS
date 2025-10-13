@@ -44,9 +44,7 @@ if __name__ == "__main__":
     parser.add_argument("--value_learning_rate", type=float, default=0.0001)
     parser.add_argument("--policy_learning_rate", type=float, default=0.0001)
     parser.add_argument("--alpha_learning_rate", type=float, default=0.0001)
-    parser.add_argument("--gamma", type=float, default=0.99)
-    parser.add_argument("--tau", type=float, default=0.005)
-    parser.add_argument("--penalty", type=float, default=1.)
+    parser.add_argument("--penalty", type=float, default=10.)
 
     # Parameters for trainer
     parser.add_argument("--trainer", type=str, default="off_serial_trainer")
