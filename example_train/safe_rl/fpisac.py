@@ -32,10 +32,10 @@ if __name__ == "__main__":
     parser.add_argument("--value_func_type", type=str, default="MLP")
     parser.add_argument("--value_hidden_sizes", type=list, default=[256, 256])
     parser.add_argument("--value_hidden_activation", type=str, default="relu")
-    parser.add_argument("--scenery_func_name", type=str, default="ActionValue")
-    parser.add_argument("--scenery_func_type", type=str, default="MLP")
-    parser.add_argument("--scenery_hidden_sizes", type=list, default=[256, 256])
-    parser.add_argument("--scenery_hidden_activation", type=str, default="relu")
+    parser.add_argument("--feasibility_func_name", type=str, default="ActionValue")
+    parser.add_argument("--feasibility_func_type", type=str, default="MLP")
+    parser.add_argument("--feasibility_hidden_sizes", type=list, default=[256, 256])
+    parser.add_argument("--feasibility_hidden_activation", type=str, default="relu")
     parser.add_argument("--policy_func_name", type=str, default="StochaPolicy")
     parser.add_argument("--policy_func_type", type=str, default="MLP")
     parser.add_argument("--policy_act_distribution", type=str, default="TanhGaussDistribution")
@@ -46,8 +46,11 @@ if __name__ == "__main__":
 
     # Parameters for RL algorithm
     parser.add_argument("--value_learning_rate", type=float, default=0.0001)
+    parser.add_argument("--feasibility_learning_rate", type=float, default=0.0001)
     parser.add_argument("--policy_learning_rate", type=float, default=0.0001)
     parser.add_argument("--alpha_learning_rate", type=float, default=0.0001)
+    parser.add_argument("--epsilon", type=float, default=0.1)
+    parser.add_argument("--penalty", type=float, default=1.)
 
     # Parameters for trainer
     parser.add_argument("--trainer", type=str, default="off_serial_trainer")

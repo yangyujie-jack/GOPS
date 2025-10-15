@@ -20,6 +20,7 @@ class ApproxContainer(SACApproxContainer):
     def __init__(
         self,
         value_learning_rate: float,
+        feasibility_learning_rate: float,
         policy_learning_rate: float,
         alpha_learning_rate: float,
         **kwargs,
@@ -31,7 +32,7 @@ class ApproxContainer(SACApproxContainer):
             **kwargs,
         )
         # create feasibility networks
-        g_args = get_apprfunc_dict("value", **kwargs)
+        g_args = get_apprfunc_dict("feasibility", **kwargs)
         self.g1: nn.Module = create_apprfunc(**g_args)
         self.g2: nn.Module = create_apprfunc(**g_args)
         self.g1_target: nn.Module = deepcopy(self.g1)
@@ -42,8 +43,8 @@ class ApproxContainer(SACApproxContainer):
         for p in self.g2_target.parameters():
             p.requires_grad = False
 
-        self.g1_optimizer = Adam(self.g1.parameters(), lr=value_learning_rate)
-        self.g2_optimizer = Adam(self.g2.parameters(), lr=value_learning_rate)
+        self.g1_optimizer = Adam(self.g1.parameters(), lr=feasibility_learning_rate)
+        self.g2_optimizer = Adam(self.g2.parameters(), lr=feasibility_learning_rate)
 
 
 class FPISAC(SAC):
@@ -56,7 +57,8 @@ class FPISAC(SAC):
         auto_alpha: bool = True,
         target_entropy: Optional[float] = None,
         gamma_g: float = 0.99,
-        pf: float = 0.1,
+        epsilon: float = 0.1,
+        penalty: float = 1.,
         **kwargs,
     ):
         super().__init__(index, **kwargs)
@@ -70,11 +72,12 @@ class FPISAC(SAC):
         else:
             self.target_entropy = target_entropy
         self.gamma_g = gamma_g
-        self.pf = pf
+        self.epsilon = epsilon
+        self.penalty = penalty
 
     @property
     def adjustable_parameters(self):
-        return super().adjustable_parameters + ("gamma_g", "pf")
+        return super().adjustable_parameters + ("gamma_g", "epsilon")
 
     def _compute_gradient(self, data: DataDict, iteration: int):
         start_time = time.time()
@@ -176,8 +179,8 @@ class FPISAC(SAC):
         q2 = self.networks.q2(obs, new_act)
         q = torch.min(q1, q2)
 
-        fea = g <= self.pf
-        loss = ((fea * -q + ~fea * g + self.alpha * new_logp)).mean()
+        fea = g <= self.epsilon
+        loss = ((self.alpha * new_logp - q + self.penalty * ~fea * g)).mean()
         return loss, (-new_logp.mean().detach(), fea.float().mean())
 
     def _update(self, iteration: int):
