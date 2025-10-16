@@ -77,7 +77,7 @@ class FPISAC(SAC):
 
     @property
     def adjustable_parameters(self):
-        return super().adjustable_parameters + ("gamma_g", "epsilon")
+        return super().adjustable_parameters + ("gamma_g", "epsilon", "penalty")
 
     def _compute_gradient(self, data: DataDict, iteration: int):
         start_time = time.time()
@@ -129,14 +129,14 @@ class FPISAC(SAC):
             tb_tags["loss_critic"]: loss_q.item(),
             tb_tags["loss_actor"]: loss_policy.item(),
             "Loss/Scenery loss-RL iter": loss_g.item(),
-            "SACFPI/critic_avg_q1-RL iter": q1.item(),
-            "SACFPI/critic_avg_q2-RL iter": q2.item(),
-            "SACFPI/scenery_avg_g1-RL iter": g1.item(),
-            "SACFPI/scenery_avg_g2-RL iter": g2.item(),
-            "SACFPI/entropy-RL iter": entropy.item(),
-            "SACFPI/alpha-RL iter": self.alpha.item(),
-            "SACFPI/violation-RL iter": data["next_constraint"].mean().item(),
-            "SACFPI/feasible-RL iter": fea.item(),
+            "FPISAC/critic_avg_q1-RL iter": q1.item(),
+            "FPISAC/critic_avg_q2-RL iter": q2.item(),
+            "FPISAC/scenery_avg_g1-RL iter": g1.item(),
+            "FPISAC/scenery_avg_g2-RL iter": g2.item(),
+            "FPISAC/entropy-RL iter": entropy.item(),
+            "FPISAC/alpha-RL iter": self.alpha.item(),
+            "FPISAC/violation-RL iter": data["next_constraint"].mean().item(),
+            "FPISAC/feasible-RL iter": fea.item(),
             tb_tags["alg_time"]: (time.time() - start_time) * 1000,
         }
 
