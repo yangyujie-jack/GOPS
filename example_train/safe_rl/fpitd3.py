@@ -1,0 +1,90 @@
+#  Copyright (c). All Rights Reserved.
+#  General Optimal control Problem Solver (GOPS)
+#  Intelligent Driving Lab(iDLab), Tsinghua University
+#
+#  Creator: iDLab
+#  Lab Leader: Prof. Shengbo Eben Li
+#  Email: lisb04@gmail.com
+
+import argparse
+
+import numpy as np
+from gops.create_pkg.create_alg import create_alg
+from gops.create_pkg.create_buffer import create_buffer
+from gops.create_pkg.create_env import create_env
+from gops.create_pkg.create_evaluator import create_evaluator
+from gops.create_pkg.create_sampler import create_sampler
+from gops.create_pkg.create_trainer import create_trainer
+from gops.utils.init_args import init_args
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+
+    # Key Parameters
+    parser.add_argument("--env_id", type=str, default="safe_rl")
+    parser.add_argument("--safe_rl_env_id", type=str, default="Safety-Gymnasium-SafetyPointGoal1-v0")
+    parser.add_argument("--algorithm", type=str, default="FPITD3")
+    parser.add_argument("--enable_cuda", action="store_true")
+    parser.add_argument("--seed", type=int, default=1)
+
+    # Parameters of approximate function
+    parser.add_argument("--value_func_name", type=str, default="ActionValue")
+    parser.add_argument("--value_func_type", type=str, default="MLP")
+    parser.add_argument("--value_hidden_sizes", type=list, default=[256, 256])
+    parser.add_argument("--value_hidden_activation", type=str, default="relu")
+    parser.add_argument("--feasibility_func_name", type=str, default="ActionValue")
+    parser.add_argument("--feasibility_func_type", type=str, default="MLP")
+    parser.add_argument("--feasibility_hidden_sizes", type=list, default=[256, 256])
+    parser.add_argument("--feasibility_hidden_activation", type=str, default="relu")
+    parser.add_argument("--policy_func_name", type=str, default="DetermPolicy")
+    parser.add_argument("--policy_func_type", type=str, default="MLP")
+    parser.add_argument("--policy_act_distribution", type=str, default="default")
+    parser.add_argument("--policy_hidden_sizes", type=list, default=[256, 256])
+    parser.add_argument("--policy_hidden_activation", type=str, default="relu")
+
+    # Parameters for RL algorithm
+    parser.add_argument("--value_learning_rate", type=float, default=0.0001)
+    parser.add_argument("--feasibility_learning_rate", type=float, default=0.0001)
+    parser.add_argument("--policy_learning_rate", type=float, default=0.0001)
+    parser.add_argument("--epsilon", type=float, default=0.1)
+    parser.add_argument("--penalty", type=float, default=1.)
+
+    # Parameters for trainer
+    parser.add_argument("--trainer", type=str, default="off_serial_trainer")
+    parser.add_argument("--max_iteration", type=int, default=2000000)
+    parser.add_argument("--buffer_name", type=str, default="replay_buffer")
+    parser.add_argument("--buffer_warm_size", type=int, default=10000)
+    parser.add_argument("--buffer_max_size", type=int, default=2000000)
+    parser.add_argument("--replay_batch_size", type=int, default=256)
+    parser.add_argument("--sample_interval", type=int, default=100)
+    parser.add_argument("--apprfunc_save_interval", type=int, default=1000000)
+    parser.add_argument("--log_save_interval", type=int, default=10000)
+
+    # Parameters for sampler
+    parser.add_argument("--sampler_name", type=str, default="off_sampler")
+    parser.add_argument("--sample_batch_size", type=int, default=100)
+    parser.add_argument("--noise_std", type=float, default=0.1)
+
+    # Parameters for evaluator
+    parser.add_argument("--evaluator_name", type=str, default="evaluator")
+    parser.add_argument("--num_eval_episode", type=int, default=10)
+    parser.add_argument("--eval_interval", type=int, default=10000)
+
+    # Get parameter dictionary
+    args = vars(parser.parse_args())
+    env = create_env(**args)
+    args["noise_params"] = {
+        "mean": np.zeros(env.action_space.shape[0], dtype=np.float32),
+        "std": np.ones(env.action_space.shape[0], dtype=np.float32) * args["noise_std"],
+    }
+    new_args = init_args(env, **{**args, "env_id": args["safe_rl_env_id"]})
+    args = {**new_args, "env_id": args["env_id"]}
+
+    # Steps to start training
+    alg = create_alg(**args)
+    sampler = create_sampler(**args)
+    buffer = create_buffer(**args)
+    evaluator = create_evaluator(**args, constraint=True)
+    trainer = create_trainer(alg, sampler, buffer, evaluator, **args)
+    trainer.train()
