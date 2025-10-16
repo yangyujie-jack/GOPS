@@ -48,13 +48,13 @@ if __name__ == "__main__":
 
     # Parameters for trainer
     parser.add_argument("--trainer", type=str, default="off_serial_trainer")
-    parser.add_argument("--max_iteration", type=int, default=1000000)
+    parser.add_argument("--max_iteration", type=int, default=2000000)
     parser.add_argument("--buffer_name", type=str, default="replay_buffer")
     parser.add_argument("--buffer_warm_size", type=int, default=10000)
-    parser.add_argument("--buffer_max_size", type=int, default=1000000)
+    parser.add_argument("--buffer_max_size", type=int, default=2000000)
     parser.add_argument("--replay_batch_size", type=int, default=256)
     parser.add_argument("--sample_interval", type=int, default=100)
-    parser.add_argument("--apprfunc_save_interval", type=int, default=100000)
+    parser.add_argument("--apprfunc_save_interval", type=int, default=1000000)
     parser.add_argument("--log_save_interval", type=int, default=10000)
 
     # Parameters for sampler
