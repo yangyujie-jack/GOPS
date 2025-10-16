@@ -3,7 +3,7 @@ from typing import Union
 
 import numpy as np
 import torch
-from torch import nn
+import torch.nn as nn
 
 
 def angle_normalize(
