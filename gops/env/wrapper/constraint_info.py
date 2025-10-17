@@ -17,7 +17,7 @@ class ConstraintInfo(gym.Wrapper):
     def additional_info(self):
         return {
             **getattr(self.env, "additional_info", {}),
-            "constraint": {"shape": (1,), "dtype": np.float32},
+            "constraint": {"shape": (), "dtype": np.float32},
         }
 
     def _get_constraint(self, info: dict) -> float:
