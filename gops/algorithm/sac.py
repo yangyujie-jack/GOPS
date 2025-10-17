@@ -215,7 +215,7 @@ class SAC(AlgorithmBase):
         with torch.no_grad():
             next_logits = self.networks.policy(obs2)
             next_act_dist = self.networks.create_action_distributions(next_logits)
-            next_act, next_logp = next_act_dist.rsample()
+            next_act, next_logp = next_act_dist.sample()
             next_q1 = self.networks.q1_target(obs2, next_act)
             next_q2 = self.networks.q2_target(obs2, next_act)
             next_q = torch.min(next_q1, next_q2)

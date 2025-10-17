@@ -155,7 +155,7 @@ class FPISAC(SAC):
         with torch.no_grad():
             next_logits = self.networks.policy(obs2)
             next_act_dist = self.networks.create_action_distributions(next_logits)
-            next_act, _ = next_act_dist.rsample()
+            next_act, _ = next_act_dist.sample()
             g1_next = self.networks.g1_target(obs2, next_act)
             g2_next = self.networks.g2_target(obs2, next_act)
             g_next = torch.clamp(torch.max(g1_next, g2_next), 0, 1)
