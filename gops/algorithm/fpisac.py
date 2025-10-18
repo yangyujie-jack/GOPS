@@ -108,7 +108,7 @@ class FPISAC(SAC):
             p.requires_grad = False
 
         self.networks.policy_optimizer.zero_grad()
-        loss_policy, (entropy, fea) = self._compute_loss_policy(data)
+        loss_policy, (entropy, fea, g) = self._compute_loss_policy(data)
         loss_policy.backward()
 
         for p in self.networks.q1.parameters():
@@ -139,6 +139,11 @@ class FPISAC(SAC):
             "FPISAC/feasible-RL iter": fea.item(),
             tb_tags["alg_time"]: (time.time() - start_time) * 1000,
         }
+
+        qs = [0.01, 0.1, 0.9, 0.95, 0.99]
+        g_quantiles = torch.quantile(g, torch.tensor(qs, device=g.device))
+        for q, g_q in zip(qs, g_quantiles):
+            tb_info[f"FPISAC/g_quantile_{q}-RL iter"] = g_q.item()
 
         return tb_info
 
@@ -180,8 +185,8 @@ class FPISAC(SAC):
         q = torch.min(q1, q2)
 
         fea = g <= self.epsilon
-        loss = ((self.alpha * new_logp - q + self.penalty * ~fea * g)).mean()
-        return loss, (-new_logp.mean().detach(), fea.float().mean())
+        loss = (self.alpha * new_logp - q + self.penalty * ~fea * g).mean()
+        return loss, (-new_logp.mean().detach(), fea.float().mean(), g.detach())
 
     def _update(self, iteration: int):
         super()._update(iteration)
