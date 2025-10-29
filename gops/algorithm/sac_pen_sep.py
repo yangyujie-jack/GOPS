@@ -136,13 +136,13 @@ class SACPenSep(SAC):
             tb_tags["loss_critic"]: loss_q.item(),
             tb_tags["loss_actor"]: loss_policy.item(),
             "Loss/Scenery loss-RL iter": loss_g.item(),
-            "SACPen/critic_avg_q1-RL iter": q1.item(),
-            "SACPen/critic_avg_q2-RL iter": q2.item(),
-            "SACPen/scenery_avg_g1-RL iter": g1.item(),
-            "SACPen/scenery_avg_g2-RL iter": g2.item(),
-            "SACPen/entropy-RL iter": entropy.item(),
-            "SACPen/alpha-RL iter": self.alpha.item(),
-            "SACPen/violation-RL iter": data["next_constraint"].mean().item(),
+            "SAC/critic_avg_q1-RL iter": q1.item(),
+            "SAC/critic_avg_q2-RL iter": q2.item(),
+            "SAC/scenery_avg_g1-RL iter": g1.item(),
+            "SAC/scenery_avg_g2-RL iter": g2.item(),
+            "SAC/entropy-RL iter": entropy.item(),
+            "SAC/alpha-RL iter": self.alpha.item(),
+            "SAC/violation-RL iter": data["next_constraint"].mean().item(),
             tb_tags["alg_time"]: (time.time() - start_time) * 1000,
         }
 
@@ -164,7 +164,7 @@ class SACPenSep(SAC):
             next_act, _ = next_act_dist.sample()
             next_g1 = self.networks.g1_target(obs2, next_act)
             next_g2 = self.networks.g2_target(obs2, next_act)
-            next_g = torch.max(next_g1, next_g2)
+            next_g = torch.clamp_min(torch.max(next_g1, next_g2), 0)
             backup = constraint + (1 - done) * self.gamma_g * next_g
         loss_g1 = ((g1 - backup) ** 2).mean()
         loss_g2 = ((g2 - backup) ** 2).mean()
@@ -185,7 +185,7 @@ class SACPenSep(SAC):
         q2 = self.networks.q2(obs, new_act)
         q = torch.min(q1, q2)
 
-        loss = (self.alpha * new_logp - q + self.penalty * g).mean()
+        loss = (self.alpha * new_logp - q + self.penalty * torch.clamp_min(g, 0)).mean()
         return loss, -new_logp.mean().detach()
 
     def _update(self, iteration: int):
